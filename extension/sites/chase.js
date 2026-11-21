@@ -123,11 +123,12 @@ export default {
           await sleep(700);
           // The value of the account over time, which is what its chart on Chase is drawn from.
           const balances = '/svc/wr/dwm/secure/gateway/investments/servicing/inquiry-maintenance/digital-investment-portfolio/v2/balances', who = `selector-identifier=${a.accountId}&selector-code=ACCOUNT`;
-          await fetch(`${balances}/monthly-balances?${who}`, { headers: fresh(headers), credentials: 'include' }).catch(() => null);
+          const asJson = { ...fresh(headers), 'content-type': 'application/json' };   // these feeds refuse the form style the dashboard's own requests use
+          await fetch(`${balances}/monthly-balances?${who}`, { headers: asJson, credentials: 'include' }).catch(() => null);
           const iso = (d, dashes) => { const p = (n) => String(n).padStart(2, '0'); return [d.getFullYear(), p(d.getMonth() + 1), p(d.getDate())].join(dashes ? '-' : ''); };
           const end = new Date(), start = new Date(Date.now() - 364 * 86_400_000);
           for (const dashes of [true, false]) {   // the date style Chase expects here is not known; try both
-            const res = await fetch(`${balances}/daily-balances?${who}&balance-end-date=${iso(end, dashes)}&balance-start-date=${iso(start, dashes)}`, { headers: fresh(headers), credentials: 'include' }).catch(() => null);
+            const res = await fetch(`${balances}/daily-balances?${who}&balance-end-date=${iso(end, dashes)}&balance-start-date=${iso(start, dashes)}`, { headers: asJson, credentials: 'include' }).catch(() => null);
             if (res?.ok) break;
           }
           await sleep(700);
