@@ -15,6 +15,7 @@ const ACTIONS = [
   [/DIRECT DEPOSIT|FUNDS TRANSFER RECEIVED|^DEPOSIT|CHECK RECEIVED|TRANSFERRED FROM|CASH CONTRIBUTION/i, 'Deposit'],
   [/FUNDS TRANSFER PAID|TRANSFERRED TO|WITHDRAWAL|DIRECT DEBIT|BILL PAYMENT|CHECK PAID|DEBIT CARD/i, 'Withdrawal'],
 ];
+const RETIREMENT = /\bIRA\b|ROTH|ROLLOVER|401|403|457|PENSION|\bSEP\b|RETIRE|WORKPLACE/i;
 const isoDate = (n) => today(new Date(n < 1e11 ? n * 1000 : n));   // seconds or milliseconds since 1970
 
 export default {
@@ -31,7 +32,7 @@ export default {
       const value = a.gainLossBalanceDetail?.totalMarketVal;
       if (!a.acctNum || typeof value !== 'number') continue;   // linked outside accounts and the like carry no balance here
       accounts.set(a.acctNum, { id: a.acctNum, name: a.preferenceDetail?.name || a.acctSubTypeDesc || a.acctType || 'Fidelity account', mask: a.acctNum.slice(-4), balance: value, transactions: [],
-        type: a.acctTypesIndDetail?.isRetirement || a.workplacePlanDetail?.planName ? 'retirement' : 'investment' });
+        type: a.acctTypesIndDetail?.isRetirement || a.workplacePlanDetail?.planName || RETIREMENT.test(`${a.preferenceDetail?.name} ${a.acctSubTypeDesc} ${a.acctType}`) ? 'retirement' : 'investment' });
     }
     const seen = new Set();
     let skipped = 0;
