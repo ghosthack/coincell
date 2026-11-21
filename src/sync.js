@@ -25,7 +25,8 @@ async function syncOne(bank, log) {
 
 /** Sync one institution, or every registered one in turn with bankId "all". */
 export async function runSync(bankId) {
-  const banks = bankId === 'all' ? BANKS : [getBank(bankId)];
+  // "all" leaves out institutions the browser extension feeds; those are sent from Chrome.
+  const banks = bankId === 'all' ? BANKS.filter((b) => !b.viaExtension) : [getBank(bankId)];
   if (!banks[0]) throw new Error(`Unknown bank "${bankId}"`);
   if (state.running) throw new Error(`A sync of ${state.bank} is already running`);
   Object.assign(state, { running: true, bank: bankId, startedAt: new Date().toISOString(), log: [] });

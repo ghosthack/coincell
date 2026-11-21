@@ -6,11 +6,13 @@
 // To add a real institution: add it here and write its script in sites/.
 import kestrel from './sites/demo/kestrel.js';
 import fidelity from './sites/fidelity.js';
+import chase from './sites/chase.js';
 
 export const TARGETS = { demo: 'http://localhost:4690', real: 'http://localhost:4680' };
 
 export const SITES = [
   { id: 'fidelity', name: 'Fidelity', match: /^https:\/\/digital\.fidelity\.com\//, capture: fidelity, target: 'real' },
+  { id: 'chase', name: 'Chase', match: /^https:\/\/secure\.chase\.com\//, capture: chase, target: 'real' },
   { id: 'harborline', name: 'Harborline Bank (demo)', match: /^http:\/\/localhost:4701\//, file: 'sites/demo/harborline.js', target: 'demo' },
   { id: 'kestrel', name: 'Kestrel Card (demo)', match: /^http:\/\/localhost:4702\//, capture: kestrel, target: 'demo' },
   { id: 'copperleaf', name: 'Copperleaf Card (demo)', match: /^http:\/\/localhost:4703\//, file: 'sites/demo/copperleaf.js', target: 'demo' },

@@ -9,7 +9,7 @@
   const same = (u) => { try { const h = new URL(u, location.href).hostname; return h === root || h.endsWith(`.${root}`); } catch { return false; } };
   const keep = (method, url, status, text, sent) => {
     if (!same(url)) return;
-    try { store.push({ method, url: new URL(url, location.href).href, status, body: JSON.parse(text), sent }); if (store.length > 400) store.shift(); } catch { /* not JSON */ }
+    try { store.push({ at: Date.now(), method, url: new URL(url, location.href).href, status, body: JSON.parse(text), sent }); if (store.length > 1500) store.shift(); } catch { /* not JSON */ }
   };
   const realFetch = window.fetch;
   window.fetch = async function (input, init) {

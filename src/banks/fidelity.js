@@ -44,6 +44,7 @@ const isCash = (symbol, description) => /\*\*$/.test(symbol) || /^(CORE|CASH)\b|
 
 export default {
   id: 'fidelity', name: 'Fidelity', needsBrowser: false,
+  viaExtension: true,   // normally fed by the browser extension; this file import is the fallback, run by name
   async sync({ log }) {
     const positionsFile = newest(/^Portfolio_Positions.*\.csv$/i);
     const historyFile = newest(/^(Accounts_History|History_for_Account).*\.csv$/i);

@@ -60,11 +60,12 @@ async function readByCapture(tab, site) {
     const captured = [];
     for (const step of plan.steps) {
       await chrome.tabs.update(tab.id, { url: origin + step.go });
+      if (step.reload) await chrome.tabs.reload(tab.id);   // a change after the # alone does not load the page afresh
       const patterns = step.waitFor.map((r) => r.source), deadline = Date.now() + (step.timeout ?? 40_000);
       for (;;) {
         await sleep(400);
         const now = await chrome.tabs.get(tab.id);
-        if (now.status === 'complete' && plan.loggedOut?.test(new URL(now.url).pathname)) throw new Error(LOGIN_FIRST);
+        if (now.status === 'complete' && plan.loggedOut?.test(new URL(now.url).pathname + new URL(now.url).hash)) throw new Error(LOGIN_FIRST);
         const have = await inPage(tab.id, (ps) => ps.map((p) => (window.__coincellCapture ?? []).some((e) => new RegExp(p).test(e.url) && e.status < 400)), [patterns]).catch(() => null);
         if (have?.every(Boolean)) break;   // null while the page is still loading
         if (Date.now() > deadline) throw new Error(`${site.name} did not load its data on ${step.go}. Is the page showing an error or a prompt?`);
@@ -79,7 +80,7 @@ async function readByCapture(tab, site) {
       }
       if (step.act) await inPage(tab.id, step.act);
       await sleep(step.settle ?? 600);
-      captured.push(...await inPage(tab.id, () => (window.__coincellCapture ?? []).map(({ method, url, status, body }) => ({ method, url, status, body }))));
+      captured.push(...await inPage(tab.id, () => (window.__coincellCapture ?? []).map(({ method, url, status, body, sent }) => ({ method, url, status, body, sent: sent?.body }))));
     }
     // While a site script is still being worked out, save the SHAPE of the feeds it names:
     // field names and types with every value removed, as the recorder does.

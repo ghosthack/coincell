@@ -11,7 +11,7 @@
   // `url` and a `response`, as some sites bundle them) is laid out per address. The only values
   // kept are short labels in fields named "...Type" or "...Code", which say what kind of thing
   // a row is ("CHECKING", "POSITION"), never who or how much.
-  const label = (k, x) => /(type|code|category|status)$/i.test(k) && typeof x === 'string' && /^[A-Za-z][A-Za-z _-]{0,23}$/.test(x);
+  const label = (k, x) => /(type|code|category|status)$/i.test(k) && !/symbol|ticker|merchant|name|city|state|postal|country|card|product|reward|brand/i.test(k) && typeof x === 'string' && /^[A-Za-z][A-Za-z _-]{0,23}$/.test(x);
   const shape = (v, depth = 0) => {
     if (v === null) return 'null';
     if (Array.isArray(v)) {
