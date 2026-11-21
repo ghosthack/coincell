@@ -62,3 +62,7 @@ Browser automation may be against an institution's terms of use, and some block 
 ## Icon
 
 The icon is a 3D coin cell modelled in three.js and lit like a product photo. Edit `icon/scene.js`, then `cd icon && npm ci && node build.js`.
+
+## Licence
+
+[MIT](LICENSE).
