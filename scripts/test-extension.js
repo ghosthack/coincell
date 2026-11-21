@@ -69,7 +69,8 @@ try {
   // Recording: the layout of a site, none of its values.
   const tabId = await worker.evaluate(async () => (await chrome.tabs.query({ url: 'http://localhost:4702/*' }))[0].id);
   p = await popup(`?tab=${tabId}`); await p.click('#record'); await p.waitForFunction(() => /Stop/.test(document.getElementById('record').textContent));
-  await tabs[4702].reload(); await tabs[4702].waitForSelector('#card-summary'); await tabs[4702].waitForTimeout(3500);
+  await tabs[4702].goto('http://localhost:4702/logout'); await logins[4702](tabs[4702]);   // a login while recording: the password must not be kept
+  await tabs[4702].waitForTimeout(3500);
   await p.click('#record'); await p.close();
   const file = path.join(env.COINCELL_DATA, 'recordings', 'localhost.extension.jsonl');
   const recorded = fs.existsSync(file) ? fs.readFileSync(file, 'utf8') : '';
@@ -78,8 +79,11 @@ try {
   console.log(`recording   -> ${data.length} data shapes (${[...new Set(data.map((e) => new URL(e.url).pathname))].join(', ')}), ${pages.length} page outline`);
   if (!data.some((e) => e.shape?.currentBalanceCents === 'number')) fail('the recording is missing the card summary shape');
   if (!pages.length) fail('the recording is missing the page outline');
-  const leaked = ['GREENLEAF', 'BAKERY', 'Kestrel Cash', '0085'].filter((s) => recorded.includes(s));
-  if (leaked.length) fail(`the recording contains real values: ${leaked.join(', ')}`); else console.log('recording   -> no merchant names, card name or card number in the file');
+  const login = data.find((e) => e.method === 'POST' && /\/api\/session$/.test(e.url));
+  console.log(`recording   -> login request kept as ${JSON.stringify(login?.sent)} with headers ${JSON.stringify(login?.sentHeaders)}`);
+  if (login?.sent?.password !== 'aaaaaaa-aaaa') fail('the recording should hold the login request with its values masked');
+  const leaked = ['GREENLEAF', 'BAKERY', 'Kestrel Cash', '0085', 'kestrel-demo'].filter((s) => recorded.includes(s));
+  if (leaked.length) fail(`the recording contains real values: ${leaked.join(', ')}`); else console.log('recording   -> no merchant names, card name, card number or password in the file');
 } finally {
   await context.close();
   demo.kill();
