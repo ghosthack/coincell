@@ -18,7 +18,9 @@ function createSite({ port, name, color, handler }) {
   const sessions = new Map();
   http.createServer(async (req, res) => {
     const url = new URL(req.url, `http://localhost:${port}`);
-    const sid = /(?:^|; )sid=([^;]+)/.exec(req.headers.cookie ?? '')?.[1];
+    // Browsers share cookies between ports of one host, so each site needs its own cookie name
+    // or logging in to one would log you out of the others.
+    const sid = new RegExp(`(?:^|; )sid${port}=([^;]+)`).exec(req.headers.cookie ?? '')?.[1];
     let session = sessions.get(sid);
     if (session && session.exp < Date.now()) { sessions.delete(sid); session = undefined; }
     if (session) session.exp = Date.now() + TTL;
@@ -29,7 +31,7 @@ function createSite({ port, name, color, handler }) {
       url, method: req.method, path: url.pathname, session, world: buildWorld(), send,
       form: Object.fromEntries(new URLSearchParams(raw)),
       body: () => { try { return JSON.parse(raw); } catch { return {}; } },
-      start: (data) => { const id = randomUUID(); sessions.set(id, { ...data, exp: Date.now() + TTL }); res.setHeader('set-cookie', `sid=${id}; HttpOnly; Path=/; SameSite=Lax`); },
+      start: (data) => { const id = randomUUID(); sessions.set(id, { ...data, exp: Date.now() + TTL }); res.setHeader('set-cookie', `sid${port}=${id}; HttpOnly; Path=/; SameSite=Lax`); },
       end: () => sessions.delete(sid),
       redirect: (to) => send(302, 'text/plain', '', { location: to }),
       json: (obj, code = 200) => send(code, 'application/json', JSON.stringify(obj)),

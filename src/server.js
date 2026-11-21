@@ -1,8 +1,8 @@
 import http from 'node:http';
 import fs from 'node:fs';
 import path from 'node:path';
-import { PUBLIC_DIR, DEMO } from './paths.js';
-import { getAccounts, getNetWorth, getNetWorthByType, getHoldings, getTransactions, getCashflow } from './db.js';
+import { PUBLIC_DIR, DEMO, dataPath } from './paths.js';
+import { getAccounts, getNetWorth, getNetWorthByType, getHoldings, getTransactions, getCashflow, saveSnapshot, linkTransfers } from './db.js';
 import { BANKS } from './banks/index.js';
 import { runSync, state } from './sync.js';
 import { getInsights } from './insights.js';
@@ -17,7 +17,7 @@ const json = (res, code, body) => {
 };
 const readBody = (req) => new Promise((resolve, reject) => {
   let s = '';
-  req.on('data', (c) => { s += c; if (s.length > 1e5) req.destroy(); });
+  req.on('data', (c) => { s += c; if (s.length > 2e7) req.destroy(); });
   req.on('end', () => { try { resolve(s ? JSON.parse(s) : {}); } catch (e) { reject(e); } });
   req.on('error', reject);
 });
@@ -71,6 +71,25 @@ const server = http.createServer(async (req, res) => {
           'content-security-policy': "default-src 'self'; style-src 'self' 'unsafe-inline'" });
         return fs.createReadStream(file).pipe(res);
       }
+    }
+    // ---- from the browser extension (it sends the x-coincell header checked above) ----
+    if (route === 'POST /api/import') {
+      const { bank, snapshot } = await readBody(req);
+      const known = BANKS.find((b) => b.id === bank);
+      if (!known) return json(res, 400, { error: `This coincell does not have an institution called "${bank}"` });
+      if (!Array.isArray(snapshot?.accounts)) return json(res, 400, { error: 'Nothing to import' });
+      saveSnapshot(bank, snapshot);
+      const linked = linkTransfers();
+      state.last = { bank, ok: true, at: new Date().toISOString(), message: `${known.name}: ${snapshot.accounts.length} accounts received from the browser extension` };
+      console.log(`[${bank}] ${snapshot.accounts.length} accounts from the extension, ${linked} new transfers matched`);
+      return json(res, 200, { accounts: snapshot.accounts.length, linked });
+    }
+    if (route === 'POST /api/recordings') {
+      const { host, entry } = await readBody(req);
+      const safe = String(host ?? '').toLowerCase().replace(/[^a-z0-9.-]/g, '');
+      if (!safe || !entry) return json(res, 400, { error: 'Nothing to record' });
+      fs.appendFileSync(dataPath('recordings', `${safe}.extension.jsonl`), JSON.stringify(entry) + '\n');
+      return json(res, 200, { ok: true });
     }
     json(res, 404, { error: 'Not found' });
   } catch (e) {

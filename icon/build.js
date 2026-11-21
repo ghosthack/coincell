@@ -7,7 +7,8 @@ const path = require('path');
 
 const root = __dirname, three = path.join(root, 'node_modules/three');
 const RENDER_SIZE = 2400, MARGIN = 0.06;
-const OUTPUTS = [[1024, 'coincell.png'], [256, '../public/icon.png'], [64, '../public/favicon.png']];
+const OUTPUTS = [[1024, 'coincell.png'], [256, '../public/icon.png'], [64, '../public/favicon.png'],
+  [128, '../extension/icons/icon-128.png'], [48, '../extension/icons/icon-48.png'], [16, '../extension/icons/icon-16.png']];
 
 (async () => {
   const browser = await chromium.launch({ args: ['--use-angle=swiftshader', '--enable-unsafe-swiftshader', '--ignore-gpu-blocklist'] });

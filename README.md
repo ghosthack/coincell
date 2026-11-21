@@ -34,9 +34,28 @@ npm run demo                      # http://localhost:4690, then press "Sync now"
   and Lakeshore Home Loans (mortgage). Their logins are filled in automatically.
 - `npm run demo:sync`: sync every demo institution from the command line (same as the "Sync now" button).
 - `npm run demo:verify`: after a sync, compare what was scraped with what the fake institutions really hold.
+- `npm run demo:test-extension`: test the browser extension end to end against the fake institutions.
 - `npm start`: the dashboard for your real institutions.
 - `npm run sync -- all`: sync every real institution from the command line, or name one.
 - `npm run record -- <login url>`: log in by hand and click around; writes the shape of every JSON call the bank's site makes (values redacted) to `.data/recordings/`. Use it to write an adapter.
+
+## Browser extension
+
+Some institutions refuse automated browsers. The extension in `extension/` works from your everyday Chrome
+instead: you log in to a site yourself, press the coincell button, and it collects your balances, holdings and
+activity from that site and hands them to coincell on the same computer. Nothing leaves your machine.
+
+1. Open `chrome://extensions`, switch on **Developer mode**, press **Load unpacked** and choose the `extension` folder.
+2. Start coincell (`npm run demo` for the made-up sites, `npm start` for real ones).
+3. Log in to a site, then press the coincell icon and **Send this site**, or **Send all open sites** to do every
+   open tab at once.
+
+For a site coincell does not know yet, press **Start recording this site**, browse your accounts, positions and
+activity pages, and stop. The recording goes to `.data/recordings/` and holds the layout of the site's pages and
+data with every value masked; it is what a new site script is written from. Site scripts live in
+`extension/sites/` and are listed in `extension/sites.js`.
+
+`npm run demo:test-extension` runs the whole thing against the made-up institutions and checks the result.
 
 ## Insights tab
 
