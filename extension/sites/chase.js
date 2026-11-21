@@ -8,11 +8,13 @@
 //   each card page                  -> its transactions, limit and statement balance
 //   the investment positions feed   -> holdings per investment account
 //   the investment activity feed    -> its transactions, for the last 90 days (the most Chase offers)
+//   the investment balance feeds    -> the account's value over time: daily for a year, monthly before
 import { balanceHistory } from '../shared.js';
 
 const TILES = /\/dashboard\/tiles\/list/, CARD_DETAIL = /\/account\/detail\/card\/list/;
 const DDA_TXNS = /\/etu-dda-transactions\/v4\/transactions/, CARD_TXNS = /\/etu-transactions\/v4\/accounts\/transactions/;
 const INVESTMENT_LIST = /\/portfolio\/account\/options\/list2/, POSITIONS = /\/digital-investment-positions\/v4\/positions/;
+const MONTHLY_BALANCES = /\/balances\/monthly-balances/, DAILY_BALANCES = /\/balances\/daily-balances/;
 const INVESTMENT_ACTIVITY = /\/digital-investment-transactions\/v2\/accounts-activities/;
 // Chase labels each card and checking transaction with a category code of its own.
 const CATEGORIES = { TRAV: 'Travel', FOOD: 'Food & drink', GROC: 'Groceries', SHOP: 'Shopping', BILL: 'Bills & utilities', HOME: 'Home', PROF: 'Professional services', GASS: 'Gas', ENTE: 'Entertainment',
@@ -119,6 +121,16 @@ export default {
             headers: { ...fresh(headers), 'content-type': 'application/json' },
             body: JSON.stringify({ selectorIdentifier: String(a.accountId), selectorCode: 'ACCOUNT', activityCategory: { transactionTypeCode: '1', transactionCategoryCode: 'TRID' }, timePeriodName: 'LAST_90' }) }).catch(() => null);
           await sleep(700);
+          // The value of the account over time, which is what its chart on Chase is drawn from.
+          const balances = '/svc/wr/dwm/secure/gateway/investments/servicing/inquiry-maintenance/digital-investment-portfolio/v2/balances', who = `selector-identifier=${a.accountId}&selector-code=ACCOUNT`;
+          await fetch(`${balances}/monthly-balances?${who}`, { headers: fresh(headers), credentials: 'include' }).catch(() => null);
+          const iso = (d, dashes) => { const p = (n) => String(n).padStart(2, '0'); return [d.getFullYear(), p(d.getMonth() + 1), p(d.getDate())].join(dashes ? '-' : ''); };
+          const end = new Date(), start = new Date(Date.now() - 364 * 86_400_000);
+          for (const dashes of [true, false]) {   // the date style Chase expects here is not known; try both
+            const res = await fetch(`${balances}/daily-balances?${who}&balance-end-date=${iso(end, dashes)}&balance-start-date=${iso(start, dashes)}`, { headers: fresh(headers), credentials: 'include' }).catch(() => null);
+            if (res?.ok) break;
+          }
+          await sleep(700);
         }
       }
       location.hash = '#/dashboard/overview';
@@ -188,6 +200,18 @@ export default {
         balance: cents(list.reduce((s, h) => s + h.value, 0)), holdings: list, txns: new Map() });
     }
 
+    // Past values of each investment account: month-end figures first, then daily ones over them.
+    for (const feed of [MONTHLY_BALANCES, DAILY_BALANCES]) for (const c of captured) {
+      const a = feed.test(c.url) && c.status < 400 ? accounts.get(new URL(c.url).searchParams.get('selector-identifier') ?? '') : null;
+      if (!a) continue;
+      a.past ??= new Map();
+      for (const m of c.body?.marketValues ?? []) {
+        if (typeof m.marketValueAmount !== 'number' || !m.yearNumber || !m.monthNumber) continue;
+        const last = new Date(m.yearNumber, m.monthNumber, 0);   // day 0 of the next month is the last day of this one
+        a.past.set(`${last.getFullYear()}-${String(last.getMonth() + 1).padStart(2, '0')}-${String(last.getDate()).padStart(2, '0')}`, m.marketValueAmount);
+      }
+      for (const d of c.body?.dailyBalanceDetails ?? []) if (typeof d.balanceAmount === 'number' && ymd(d.balanceDate)) a.past.set(ymd(d.balanceDate), d.balanceAmount);
+    }
     for (const c of captured) {   // investment activity: reinvestments, interest and the like
       if (!INVESTMENT_ACTIVITY.test(c.url) || c.status >= 400) continue;
       const counts = new Map();
@@ -202,8 +226,9 @@ export default {
       }
     }
 
-    const out = [...accounts.values()].map(({ txns, ...a }) => {
+    const out = [...accounts.values()].map(({ txns, past, ...a }) => {
       const transactions = [...txns.values()];
+      if (past?.size) a.history = [...past].map(([date, balance]) => ({ date, balance })).sort((x, y) => x.date.localeCompare(y.date));
       // A checking or card balance can be walked back through its transactions for the chart.
       return { ...a, transactions, ...(a.type === 'cash' || a.type === 'credit' ? { history: balanceHistory(a.balance, transactions) } : {}) };
     });
