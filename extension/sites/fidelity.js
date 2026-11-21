@@ -92,7 +92,29 @@ const isoDate = (n) => today(new Date(n < 1e11 ? n * 1000 : n));   // seconds or
 export default {
   loggedOut: /login|signin|logout|\/session\//i,
   steps: [
-    { go: '/ftgw/digital/portfolio/positions', waitFor: [/\/portfolio\/api\/GetContext/], alsoWait: [/\/poswebex\/api\/positions$/], settle: 1500 },
+    { go: '/ftgw/digital/portfolio/positions', waitFor: [/\/portfolio\/api\/GetContext/], alsoWait: [/\/poswebex\/api\/positions$/], settle: 1500,
+      // Each account's value over time, from the feed behind Fidelity's balance chart. Asked one
+      // account at a time, for the longest period the site accepts. Runs in the page.
+      act: async () => {
+        const sleep = (ms) => new Promise((r) => setTimeout(r, ms));
+        const person = (window.__coincellCapture ?? []).find((e) => /GetContext/.test(e.url) && e.body?.getContext?.person?.assets)?.body.getContext.person;
+        if (!person) return;
+        const ask = async (range, a) => {
+          const res = await fetch('/ftgw/digital/portfolio/api/BalanceHistory', { method: 'POST', credentials: 'include', headers: { accept: 'application/json', 'content-type': 'application/json' },
+            body: JSON.stringify({ range, acctList: [{ acctNum: a.acctNum, acctType: a.acctType }] }) }).catch(() => null);
+          const got = res?.ok ? await res.clone().json().catch(() => null) : null;
+          return got?.balHistoryDetail?.balances?.length ?? 0;
+        };
+        let range = null, misses = 0;
+        for (const a of person.assets.filter((x) => x.acctNum && typeof x.gainLossBalanceDetail?.totalMarketVal === 'number')) {
+          if (range) await ask(range, a);
+          else {
+            for (const r of ['5Y', '3Y', '2Y', '1Y']) { if (await ask(r, a)) { range = r; break; } await sleep(300); }
+            if (!range && ++misses >= 3) return;   // the feed is not answering; do not keep asking
+          }
+          await sleep(350);
+        }
+      } },
     { go: '/ftgw/digital/portfolio/activity', waitFor: [/\/activityapi\/api\/v1\/transactions\/history/], settle: 1500,
       // The Activity page only loads its default range (about 30 days). To go further back, repeat
       // the page's own request, unchanged except for the dates, in 90-day steps for up to two years.
@@ -116,7 +138,7 @@ export default {
         }
       } },
   ],
-  describe: [/\/poswebex\/api\/positions$/],
+  describe: [],
   build(captured) {
     const context = captured.find((c) => /GetContext/.test(c.url) && c.body?.getContext?.person?.assets)?.body.getContext.person;
     if (!context) throw new Error('Fidelity did not send the account list');
@@ -142,6 +164,18 @@ export default {
         a.transactions.push({ date: isoDate(date), description, amount, category: ACTIONS.find(([re]) => re.test(description))?.[1] ?? 'Other' });
       }
     }
+    // Past values per account. The feed's dates are text in whatever style the site uses.
+    const pastDate = (s) => { const t = String(s ?? ''); const m = t.match(/^(\d{1,2})\/(\d{1,2})\/(\d{4})/); if (/^\d{4}-\d{2}-\d{2}/.test(t)) return t.slice(0, 10); if (m) return `${m[3]}-${m[1].padStart(2, '0')}-${m[2].padStart(2, '0')}`; const d = Date.parse(t); return Number.isNaN(d) ? null : today(new Date(d)); };
+    let histories = 0;
+    for (const c of captured) {
+      const rows = /\/api\/BalanceHistory$/.test(c.url) ? c.body?.balHistoryDetail?.balances : null;
+      if (!rows?.length) continue;
+      let asked; try { asked = JSON.parse(c.sent ?? '{}'); } catch { asked = {}; }
+      const a = asked.acctList?.length === 1 ? accounts.get(asked.acctList[0].acctNum) : null;
+      if (!a || (a.history?.length ?? 0) >= rows.length) continue;
+      if (!a.history) histories++;
+      a.history = rows.map((r) => ({ date: pastDate(r.date), balance: r.value })).filter((r) => r.date && typeof r.balance === 'number');
+    }
     const feed = captured.filter((c) => /\/poswebex\/api\/positions$/.test(c.url)).at(-1)?.body;
     const found = feed?.rowData ? fromRows(feed) : [];
     if (feed && !found.length) findPositions(feed, null, found);
@@ -161,6 +195,6 @@ export default {
     for (const a of accounts.values()) if (a.holdings) { a.holdings = [...a.holdings.values()]; holdings += a.holdings.length; }
     const out = [...accounts.values()];
     if (!out.length) throw new Error('Fidelity sent an account list, but none of the accounts carried a balance');
-    return { accounts: out, note: `${holdings} holdings, ${out.reduce((s, a) => s + a.transactions.length, 0)} transactions${skipped ? `, ${skipped} skipped for accounts without a balance` : ''}` };
+    return { accounts: out, note: `${holdings} holdings, ${out.reduce((s, a) => s + a.transactions.length, 0)} transactions, past values for ${histories} accounts${skipped ? `, ${skipped} skipped for accounts without a balance` : ''}` };
   },
 };

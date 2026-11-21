@@ -70,7 +70,7 @@
     if (v === null || typeof v === 'boolean') return v;
     if (typeof v === 'number') return Number.isInteger(v) && Math.abs(v) < 1000 ? v : 'number';   // small counts are settings
     if (typeof v === 'string') return /^(operationName|operation)$/i.test(key) ? v : /^query$/i.test(key) ? v.slice(0, 4000).replace(/[0-9]{4,}/g, '#')
-      : /^(true|false|\d{1,3}|[A-Z][A-Z0-9_]{1,40})$/.test(v) && !/\d{4}/.test(v) ? v : mask(v);   // CAPITAL_WORDS, LAST_90 and "9" are the site's own settings; everything else is masked
+      : /^(true|false|\d{1,3}|[A-Z0-9][A-Z0-9_]{1,40})$/.test(v) && !/\d{4}/.test(v) && !/symbol|position|ticker|security|cusip|name|acct|account|entity|ids?$/i.test(key) ? v : mask(v);   // CAPITAL_WORDS, LAST_90, 1Y and "9" are the site's own settings; anything under a field that can name a holding or an account is masked
     if (Array.isArray(v)) return v.length ? [maskValues(v[0], key, depth + 1), `(${v.length} items)`] : [];
     return depth > 8 ? '{...}' : Object.fromEntries(Object.entries(v).map(([k, x]) => [k, maskValues(x, k, depth + 1)]));
   };
