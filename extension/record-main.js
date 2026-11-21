@@ -58,9 +58,11 @@
     for (const [k, v] of [...x.searchParams.entries()]) x.searchParams.set(k, safeWord(v) ? v : '_');
     return x.origin + x.pathname.replace(/[A-Za-z0-9_-]{24,}/g, ':token').replace(/[0-9a-f-]{16,}|\d{4,}/gi, ':id') + x.search + x.hash.replace(/[0-9a-f-]{16,}|\d{4,}/gi, ':id').replace(/=[^&;/]*[a-z][^&;/]*/g, (m) => (safeWord(m.slice(1)) ? m : '=_'));
   };
-  // Only the site's own services matter; analytics, chat widgets and the like are skipped.
   const siteRoot = location.hostname.split('.').slice(-2).join('.');
-  const sameSite = (u) => { try { const h = new URL(u, location.href).hostname; return h === siteRoot || h.endsWith(`.${siteRoot}`); } catch { return false; } };
+  // Some sites keep their data on a differently named host, so other hosts are kept too, except
+  // the usual analytics, advertising, chat and login-widget services, which are only noise.
+  const NOISE = /datadog|qualtrics|pendo|demdex|omtrdc|adobe|cookielaw|onetrust|launchdarkly|split\.io|google|gstatic|doubleclick|facebook|walkme|fullstory|cognigy|glance|segment|mixpanel|amplitude|newrelic|nr-data|sentry|hotjar|optimizely|tealium|medallia|liveperson|okta|akamai|cloudflare|fonts\.|\/cdn\//i;
+  const sameSite = (u) => { try { const x = new URL(u, location.href); return x.hostname === siteRoot || x.hostname.endsWith(`.${siteRoot}`) || !NOISE.test(x.hostname + x.pathname); } catch { return false; } };
   const mask = (s) => String(s).slice(0, 60).replace(/[0-9]/g, '9').replace(/[A-Z]/g, 'A').replace(/[a-z]/g, 'a');
   const maskDigits = (s) => String(s).slice(0, 60).replace(/[0-9]{3,}/g, '#');   // keeps names such as "ag-row", hides ids
   // What the page SENT, so the same question can be asked again later: the structure is kept, and
