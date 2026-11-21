@@ -46,12 +46,12 @@ export async function captureJson(page, pattern, action, { settleMs = 1500 } = {
   return hits;
 }
 
-/** "$1,234.56", "(1,234.56)", "-$12.00", "1 234,56 CR" -> number */
+/** "$1,234.56", "(1,234.56)", "-$12.00", "$-12.00", "+$3.10", "1 234,56 CR" -> number */
 export function parseMoney(text) {
   if (typeof text === 'number') return text;
   const s = String(text ?? '').trim();
   if (!s) return null;
-  const negative = /^\(.*\)$/.test(s) || /^[-−–]/.test(s) || /[-−–]$/.test(s) || /\bDR\b/i.test(s);
+  const negative = /^\(.*\)$/.test(s) || /^[^\d]*[-−–]/.test(s) || /[-−–]$/.test(s) || /\bDR\b/i.test(s); // "-$5", "$-5", "(5)", "5-"
   let digits = s.replace(/[^\d.,]/g, '');
   if (/,\d{2}$/.test(digits) && !/\.\d{2}$/.test(digits)) digits = digits.replace(/\./g, '').replace(',', '.');
   else digits = digits.replace(/,/g, '');
