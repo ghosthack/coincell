@@ -219,6 +219,12 @@ export default {
       if (!a.history) histories++;
       a.history = rows.map((r) => ({ date: pastDate(r.date), balance: r.value })).filter((r) => r.date && typeof r.balance === 'number');
     }
+    // A history that does not arrive at today's balance is not this account's history. (A small
+    // workplace account came back with the values of a much larger one.) Better none than a wrong one.
+    for (const a of accounts.values()) {
+      const last = a.history?.slice().sort((x, y) => x.date.localeCompare(y.date)).at(-1)?.balance;
+      if (last != null && Math.abs(last - a.balance) > 0.3 * Math.max(Math.abs(last), Math.abs(a.balance), 1)) { delete a.history; histories--; }
+    }
     // Holdings, from three places in turn. An account keeps what the first place that knows it says.
     //   1. the rows behind the Positions table (ordinary brokerage accounts)
     //   2. a managed account's own positions list
