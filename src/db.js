@@ -103,29 +103,56 @@ export function getAccounts() {
     ORDER BY CASE a.type WHEN 'cash' THEN 1 WHEN 'credit' THEN 2 WHEN 'investment' THEN 3 WHEN 'retirement' THEN 4 WHEN 'property' THEN 5 ELSE 6 END, a.bank, a.name`).all();
 }
 
-/** Net worth per snapshot date, carrying each account's last known balance forward. */
+// ---- net worth over time ----
+// Accounts come with different amounts of history: two years for a checking account rebuilt from
+// its transactions, one year for an investment account, a single day for one the institution
+// gives no past values for. Adding them up as they appear would draw a cliff wherever a large
+// account's history begins. So the line starts on the first day that accounts making up at least
+// 90% of today's total have a known value. From there, an account is carried forward from its
+// last known value, and the few with no value yet are held at their earliest known one.
+const COVERAGE = 0.9;
+const GROUP = { cash: 'cash', investment: 'investments', retirement: 'retirement', property: 'property', credit: 'debt', loan: 'debt' };
+
+function history() {
+  const types = new Map(db.prepare('SELECT id, type FROM accounts').all().map((a) => [a.id, a.type]));
+  const rows = db.prepare('SELECT account_id, date, balance FROM balances ORDER BY date').all();
+  const first = new Map(), latest = new Map(), known = new Map();
+  for (const r of rows) { if (!first.has(r.account_id)) first.set(r.account_id, r); latest.set(r.account_id, r.balance); known.set(r.account_id, (known.get(r.account_id) ?? 0) + 1); }
+  const total = [...latest.values()].reduce((s, v) => s + Math.abs(v), 0);
+  const dates = [...new Set(rows.map((r) => r.date))];
+  const starts = [...first.values()].sort((x, y) => x.date.localeCompare(y.date));
+  let covered = 0, start = dates[0] ?? null;
+  for (const f of starts) { covered += Math.abs(latest.get(f.account_id)); if (!total || covered / total >= COVERAGE) { start = f.date; break; } }
+  const held = [...first.values()].filter((f) => f.date > start);   // shown at their earliest value until their own history begins
+  const current = new Map(held.map((f) => [f.account_id, f.balance])), days = [];
+  for (let i = 0; i < rows.length;) {
+    const date = rows[i].date;
+    for (; i < rows.length && rows[i].date === date; i++) current.set(rows[i].account_id, rows[i].balance);
+    if (date >= start) days.push({ date, balances: new Map(current) });
+  }
+  // For the note under the chart: accounts with a single known value, which is all some institutions give.
+  return { days, types, start, earliest: dates[0] ?? null, held: days.length > 1 ? held.filter((f) => known.get(f.account_id) === 1 && Math.abs(latest.get(f.account_id)) > 0).length : 0 };
+}
+
+/** Net worth per day. */
 export function getNetWorth() {
-  return db.prepare(`SELECT d.date, (
-      SELECT SUM(b.balance) FROM accounts a JOIN balances b ON b.account_id = a.id
-        AND b.date = (SELECT MAX(date) FROM balances WHERE account_id = a.id AND date <= d.date)
-    ) AS value
-    FROM (SELECT DISTINCT date FROM balances) d ORDER BY d.date`).all();
+  return history().days.map(({ date, balances }) => ({ date, value: [...balances.values()].reduce((s, v) => s + v, 0) }));
 }
 
 /** Net worth per day split into cash / investments / retirement / property / debt (debt is negative). */
 export function getNetWorthByType() {
-  const group = { cash: 'cash', investment: 'investments', retirement: 'retirement', property: 'property', credit: 'debt', loan: 'debt' };
-  const types = new Map(db.prepare('SELECT id, type FROM accounts').all().map((a) => [a.id, group[a.type] ?? 'cash']));
-  const rows = db.prepare('SELECT account_id, date, balance FROM balances ORDER BY date').all();
-  const current = new Map(), out = [];
-  for (let i = 0; i < rows.length;) {
-    const date = rows[i].date;
-    for (; i < rows.length && rows[i].date === date; i++) current.set(rows[i].account_id, rows[i].balance);
+  const { days, types } = history();
+  return days.map(({ date, balances }) => {
     const p = { date, cash: 0, investments: 0, retirement: 0, property: 0, debt: 0 };
-    for (const [id, bal] of current) p[types.get(id) ?? 'cash'] += bal;
-    out.push(p);
-  }
-  return out;
+    for (const [id, bal] of balances) p[GROUP[types.get(id)] ?? 'cash'] += bal;
+    return p;
+  });
+}
+
+/** Where the net worth line starts and why, for the note under the chart. */
+export function getHistoryNote() {
+  const { start, earliest, held } = history();
+  return { start, trimmed: Boolean(start && earliest && start > earliest), held };
 }
 
 export function getHoldings() {

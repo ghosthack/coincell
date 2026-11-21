@@ -159,6 +159,11 @@ async function load() {
   series = networth;
   $('networth').textContent = accounts.length ? money(overview.netWorth) : '–';
   $('demo-tag').hidden = !overview.demo;
+  const h = overview.history, noteParts = [];
+  if (h?.trimmed) noteParts.push(`The line starts on ${fmtDate(h.start)}, the first day that accounts making up at least 90% of today's total have a known value.`);
+  if (h?.held) noteParts.push(`${h.held} account${h.held === 1 ? ' has' : 's have'} no past values from ${h.held === 1 ? 'its' : 'their'} institution and ${h.held === 1 ? 'is' : 'are'} drawn flat at ${h.held === 1 ? 'its' : 'their'} earliest known value.`);
+  $('history-note').hidden = !noteParts.length;
+  $('history-note').textContent = noteParts.join(' ');
   noDataHint = overview.demo ? 'No data yet. Press “Sync now”.' : overview.banks.some((b) => b.needsBrowser) ? 'No data yet. Press “Sync now”.' : 'No institutions connected yet. Run “npm run demo” to explore with made-up data.';
 
   if (!$('bank').options.length) {

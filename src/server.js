@@ -2,7 +2,7 @@ import http from 'node:http';
 import fs from 'node:fs';
 import path from 'node:path';
 import { PUBLIC_DIR, DEMO, dataPath } from './paths.js';
-import { getAccounts, getNetWorth, getNetWorthByType, getHoldings, getTransactions, getCashflow, saveSnapshot, linkTransfers } from './db.js';
+import { getAccounts, getNetWorth, getNetWorthByType, getHistoryNote, getHoldings, getTransactions, getCashflow, saveSnapshot, linkTransfers } from './db.js';
 import { BANKS } from './banks/index.js';
 import { runSync, state } from './sync.js';
 import { getInsights } from './insights.js';
@@ -44,6 +44,7 @@ const server = http.createServer(async (req, res) => {
           banks: BANKS.map(({ id, name, needsBrowser }) => ({ id, name, needsBrowser })),
           sync: state,
           demo: DEMO,
+          history: getHistoryNote(),
         });
       }
       case 'GET /api/networth': return json(res, 200, getNetWorth());
