@@ -13,16 +13,54 @@ async function post(base, path, body) {
   return out;
 }
 
+const LOGIN_FIRST = 'You are not logged in to this site. Log in, then press the button again.';
+const sleep = (ms) => new Promise((r) => setTimeout(r, ms));
+const inPage = async (tabId, func, args = []) => (await chrome.scripting.executeScript({ target: { tabId }, world: 'MAIN', func, args }))[0].result;
+
+/** Read a site by asking it directly from inside the tab. */
+async function readDirect(tab, site) {
+  await chrome.scripting.executeScript({ target: { tabId: tab.id }, files: ['lib.js', site.file] });
+  const [{ result }] = await chrome.scripting.executeScript({ target: { tabId: tab.id },
+    func: async () => { try { return { snapshot: await globalThis.__coincellSite() }; } catch (e) { return { error: e.message }; } } });
+  if (result.error) throw new Error(result.error);
+  return result.snapshot;
+}
+
+/** Read a site by opening its own pages in the tab and collecting the answers they receive. */
+async function readByCapture(tab, site) {
+  const origin = new URL(tab.url).origin, id = `capture_${site.id}`, plan = site.capture;
+  await chrome.scripting.unregisterContentScripts({ ids: [id] }).catch(() => {});
+  await chrome.scripting.registerContentScripts([{ id, matches: [`${origin}/*`], js: ['capture-main.js'], world: 'MAIN', runAt: 'document_start' }]);
+  try {
+    const captured = [];
+    for (const step of plan.steps) {
+      await chrome.tabs.update(tab.id, { url: origin + step.go });
+      const patterns = step.waitFor.map((r) => r.source), deadline = Date.now() + (step.timeout ?? 40_000);
+      for (;;) {
+        await sleep(400);
+        const now = await chrome.tabs.get(tab.id);
+        if (now.status === 'complete' && plan.loggedOut?.test(new URL(now.url).pathname)) throw new Error(LOGIN_FIRST);
+        const have = await inPage(tab.id, (ps) => ps.map((p) => (window.__coincellCapture ?? []).some((e) => new RegExp(p).test(e.url) && e.status < 400)), [patterns]).catch(() => null);
+        if (have?.every(Boolean)) break;   // null while the page is still loading
+        if (Date.now() > deadline) throw new Error(`${site.name} did not load its data on ${step.go}. Is the page showing an error or a prompt?`);
+      }
+      if (step.act) await inPage(tab.id, step.act);
+      await sleep(step.settle ?? 600);
+      captured.push(...await inPage(tab.id, () => window.__coincellCapture ?? []));
+    }
+    return plan.build(captured);
+  } finally {
+    await chrome.scripting.unregisterContentScripts({ ids: [id] }).catch(() => {});
+  }
+}
+
 async function sendSite(tab) {
   const site = siteFor(tab.url);
   if (!site) return { ok: false, name: new URL(tab.url).hostname, message: 'coincell does not know this site yet.' };
   try {
-    await chrome.scripting.executeScript({ target: { tabId: tab.id }, files: ['lib.js', site.file] });
-    const [{ result }] = await chrome.scripting.executeScript({ target: { tabId: tab.id },
-      func: async () => { try { return { snapshot: await globalThis.__coincellSite() }; } catch (e) { return { error: e.message }; } } });
-    if (result.error) throw new Error(result.error);
-    const out = await post(TARGETS[site.target], '/api/import', { bank: site.id, snapshot: result.snapshot });
-    return { ok: true, name: site.name, message: `${out.accounts} account${out.accounts === 1 ? '' : 's'} sent` };
+    const { note, ...snapshot } = await (site.capture ? readByCapture(tab, site) : readDirect(tab, site));
+    const out = await post(TARGETS[site.target], '/api/import', { bank: site.id, snapshot });
+    return { ok: true, name: site.name, message: `${out.accounts} account${out.accounts === 1 ? '' : 's'} sent${note ? `, ${note}` : ''}` };
   } catch (e) {
     return { ok: false, name: site.name, message: e.message };
   }

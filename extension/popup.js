@@ -9,7 +9,7 @@ const site = siteFor(tab?.url);
 const origin = isWeb ? new URL(tab.url).origin : null;
 
 $('site').textContent = site ? site.name : isWeb ? new URL(tab.url).hostname : 'No website in this tab';
-$('hint').textContent = site ? 'Log in to the site first if you have not.' : isWeb ? 'coincell does not know this site yet. Record it so a script can be written.' : '';
+$('hint').textContent = site ? (site.capture ? 'Log in first. This tab will open the pages it needs by itself.' : 'Log in to the site first if you have not.') : isWeb ? 'coincell does not know this site yet. Record it so a script can be written.' : '';
 $('send').disabled = !site;
 $('record').disabled = !isWeb;
 
@@ -27,7 +27,11 @@ async function run(button, message) {
   button.disabled = true; $('results').textContent = 'Working…';
   try { show(await chrome.runtime.sendMessage(message)); } finally { button.disabled = false; }
 }
-$('send').addEventListener('click', () => run($('send'), { type: 'send', tabId: tab.id }));
+$('send').addEventListener('click', async () => {
+  // A site outside this computer needs your say-so once; Chrome shows the prompt.
+  if (!origin.startsWith('http://localhost') && !(await chrome.permissions.request({ origins: [`${origin}/*`] }))) return;
+  run($('send'), { type: 'send', tabId: tab.id });
+});
 $('send-all').addEventListener('click', () => run($('send-all'), { type: 'send-all' }));
 
 let recording = Boolean(origin && ((await chrome.storage.local.get('recording')).recording ?? {})[origin]);

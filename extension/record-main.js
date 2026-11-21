@@ -22,6 +22,7 @@
   const siteRoot = location.hostname.split('.').slice(-2).join('.');
   const sameSite = (u) => { try { const h = new URL(u, location.href).hostname; return h === siteRoot || h.endsWith(`.${siteRoot}`); } catch { return false; } };
   const mask = (s) => String(s).slice(0, 60).replace(/[0-9]/g, '9').replace(/[A-Z]/g, 'A').replace(/[a-z]/g, 'a');
+  const maskDigits = (s) => String(s).slice(0, 60).replace(/[0-9]{3,}/g, '#');   // keeps names such as "ag-row", hides ids
   // What the page SENT, so the same question can be asked again later: the structure is kept, and
   // every value is masked to its pattern ("2026-11-20" becomes "9999-99-99"). The names of
   // operations and the text of queries are kept, since they are part of the site, not of you.
@@ -40,9 +41,17 @@
     return `(text, ${body.length} characters)`;
   };
   const headerNames = (h) => { try { return h ? [...new Headers(h).keys()] : []; } catch { return []; } };
-  const note = (method, url, status, body, sent, headers) => {
+  // Every answer from the site's own services is noted. JSON gets its full shape. Anything else
+  // (text, pieces of a multi-part answer, binary) is listed with its type and size, plus the
+  // shape of any JSON found inside it, so data that arrives in an unusual wrapper is not missed.
+  const note = (method, url, status, body, sent, headers, type = '') => {
     if (!sameSite(url)) return;
-    try { emit({ kind: 'data', method, url: cleanUrl(url), status, sentHeaders: headers, sent: sentShape(sent), shape: shape(JSON.parse(body)) }); } catch { /* not JSON */ }
+    const base = { method, url: cleanUrl(url), status, sentHeaders: headers, sent: sentShape(sent) };
+    try { return emit({ kind: 'data', ...base, shape: shape(JSON.parse(body)) }); } catch { /* not plain JSON */ }
+    if (/image|font|css|javascript|html|video|audio/.test(type)) return;
+    const inside = [];
+    for (const line of String(body ?? '').split(/\r?\n/)) { const t = line.replace(/^data:\s*/, '').trim(); if (inside.length < 6 && /^[{[]/.test(t)) { try { inside.push(shape(JSON.parse(t))); } catch { /* not JSON */ } } }
+    emit({ kind: 'other', ...base, type, length: String(body ?? '').length, inside });
   };
 
   const realFetch = window.fetch;
@@ -57,7 +66,8 @@
     } catch { /* never disturb the page */ }
     const res = await realFetch.apply(this, arguments);
     try {
-      if ((res.headers.get('content-type') ?? '').includes('json')) res.clone().text().then((t) => note(method, res.url || url, res.status, t, sent, headers), () => {});
+      const type = res.headers.get('content-type') ?? '';
+      if (sameSite(res.url || url) && !/image|font|css|javascript|video|audio/.test(type)) res.clone().text().then((t) => note(method, res.url || url, res.status, t, sent, headers, type), () => {});
     } catch { /* never disturb the page */ }
     return res;
   };
@@ -69,23 +79,44 @@
   XMLHttpRequest.prototype.setRequestHeader = function (name) { try { this.__cc?.headers.push(String(name).toLowerCase()); } catch { /* ignore */ } return setHeader.apply(this, arguments); };
   XMLHttpRequest.prototype.send = function (body) {
     const info = this.__cc;
-    if (info) this.addEventListener('load', () => { try { if ((this.getResponseHeader('content-type') ?? '').includes('json') && typeof this.responseText === 'string') note(info.method, info.url, this.status, this.responseText, body, info.headers); } catch { /* ignore */ } });
+    if (info) this.addEventListener('load', () => { try { const text = this.responseType === '' || this.responseType === 'text' ? this.responseText : this.responseType === 'json' ? JSON.stringify(this.response) : ''; note(info.method, info.url, this.status, text, body, info.headers, this.getResponseHeader('content-type') ?? ''); } catch { /* ignore */ } });
     return send.apply(this, arguments);
   };
 
-  // The page's outline: which elements carry ids, classes and data- attributes, with all text masked.
+  // Other routes data can take: background workers, live connections, and requests that
+  // finished before recording began. Only their addresses are noted.
+  try {
+    const RealWorker = window.Worker;
+    window.Worker = new Proxy(RealWorker, { construct(target, args) { try { emit({ kind: 'worker', url: cleanUrl(String(args[0])) }); } catch { /* ignore */ } return new target(...args); } });
+    for (const name of ['WebSocket', 'EventSource']) {
+      const Real = window[name];
+      if (Real) window[name] = new Proxy(Real, { construct(target, args) { try { emit({ kind: 'live', type: name, url: cleanUrl(String(args[0])) }); } catch { /* ignore */ } return new target(...args); } });
+    }
+    const earlier = [...new Set(performance.getEntriesByType('resource').filter((r) => /fetch|xmlhttprequest/.test(r.initiatorType) && sameSite(r.name)).map((r) => cleanUrl(r.name)))];
+    if (earlier.length) emit({ kind: 'earlier', urls: earlier.slice(0, 200) });
+  } catch { /* never disturb the page */ }
+
+  // The page's outline: which elements carry ids, classes and data- attributes, with all text
+  // masked. Menus, headers and footers are skipped, repeated rows are cut to the first three,
+  // and the insides of web components are included.
   const maskText = (s) => mask(s.replace(/\s+/g, ' ').trim().slice(0, 48));
   function outline() {
     const lines = [];
     const walk = (el, depth) => {
-      if (lines.length >= 500 || depth > 14 || /^(SCRIPT|STYLE|SVG|NOSCRIPT|IFRAME)$/i.test(el.tagName)) return;
-      const attrs = [...el.attributes].filter((a) => /^(id|class|role|name|type|href)$|^data-|^aria-label$/.test(a.name))
-        .map((a) => (a.name === 'id' ? `#${a.value}` : a.name === 'class' ? `.${a.value.trim().split(/\s+/).slice(0, 4).join('.')}` : a.name === 'href' ? `[href=${cleanUrl(a.value).replace(location.origin, '')}]` : `[${a.name}${/^data-|^name$|^type$|^role$/.test(a.name) ? `=${a.name.startsWith('data-') ? maskText(a.value) : a.value}` : ''}]`)).join('');
+      if (lines.length >= 1500 || depth > 30 || /^(SCRIPT|STYLE|SVG|NOSCRIPT|IFRAME|HEADER|NAV|FOOTER|LINK|META)$/i.test(el.tagName)) return;
+      if (/^(navigation|banner|contentinfo|dialog)$/.test(el.getAttribute('role') ?? '')) return;
+      const attrs = [...el.attributes].filter((a) => /^(id|class|role|name|type|href|col-id|row-index|headers)$|^data-|^aria-label$/.test(a.name))
+        .map((a) => (a.name === 'id' ? `#${maskDigits(a.value)}` : a.name === 'class' ? `.${a.value.trim().split(/\s+/).slice(0, 4).map(maskDigits).join('.')}` : a.name === 'href' ? '[href]'
+          : `[${a.name}${/^(name|type|role|col-id|headers)$/.test(a.name) ? `=${maskDigits(a.value)}` : a.name.startsWith('data-') ? `=${maskText(a.value)}` : ''}]`)).join('');
       const own = [...el.childNodes].filter((n) => n.nodeType === 3).map((n) => n.textContent).join(' ');
-      const interesting = attrs || /^(TABLE|THEAD|TBODY|TR|TH|TD|DL|DT|DD|H1|H2|H3|FORM|BUTTON|A|INPUT|SELECT|MAIN|SECTION|NAV|UL|LI)$/.test(el.tagName);
-      if (interesting) lines.push(`${'  '.repeat(Math.min(depth, 10))}${el.tagName.toLowerCase()}${attrs}${maskText(own) ? ` "${maskText(own)}"` : ''}`);
-      const kids = [...el.children];
-      kids.slice(0, 40).forEach((k, i) => { if (!(el.tagName === 'TBODY' && i >= 3) && !(el.tagName === 'UL' && i >= 4)) walk(k, depth + (interesting ? 1 : 0)); });
+      const interesting = attrs || /^(TABLE|THEAD|TBODY|TR|TH|TD|DL|DT|DD|H1|H2|H3|FORM|BUTTON|A|INPUT|SELECT|MAIN|SECTION|UL|LI)$/.test(el.tagName) || el.tagName.includes('-');
+      if (interesting) lines.push(`${'  '.repeat(Math.min(depth, 14))}${el.tagName.toLowerCase()}${attrs}${maskText(own) ? ` "${maskText(own)}"` : ''}`);
+      const seen = new Map();
+      for (const k of [...(el.shadowRoot?.children ?? []), ...el.children]) {
+        const sig = `${k.tagName}.${(k.getAttribute('class') ?? '').replace(/\d+/g, '')}`;
+        seen.set(sig, (seen.get(sig) ?? 0) + 1);
+        if (seen.get(sig) <= 3) walk(k, depth + (interesting ? 1 : 0));
+      }
     };
     if (document.body) walk(document.body, 0);
     emit({ kind: 'page', url: cleanUrl(location.href), outline: lines });
