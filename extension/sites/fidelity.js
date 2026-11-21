@@ -180,10 +180,15 @@ export default {
   build(captured) {
     const context = captured.find((c) => /GetContext/.test(c.url) && c.body?.getContext?.person?.assets)?.body.getContext.person;
     if (!context) throw new Error('Fidelity did not send the account list');
-    const accounts = new Map();
+    const accounts = new Map(), drop = [];
     for (const a of context.assets) {
       const value = a.gainLossBalanceDetail?.totalMarketVal;
-      if (!a.acctNum || typeof value !== 'number') continue;   // linked outside accounts and the like carry no balance here
+      // Fidelity can show accounts you have linked from other institutions ("External"). They are
+      // not Fidelity's, their debts are not marked as debts here, and connecting those
+      // institutions directly would count them twice. They are left out, and removed if an
+      // earlier version brought them in.
+      if (a.acctType === 'External') { if (a.acctNum) drop.push(a.acctNum); continue; }
+      if (!a.acctNum || typeof value !== 'number') continue;
       accounts.set(a.acctNum, { id: a.acctNum, name: a.preferenceDetail?.name || a.acctSubTypeDesc || a.acctType || 'Fidelity account', mask: a.acctNum.slice(-4), balance: value, transactions: [],
         type: a.acctTypesIndDetail?.isRetirement || a.workplacePlanDetail?.planName || RETIREMENT.test(`${a.preferenceDetail?.name} ${a.acctSubTypeDesc} ${a.acctType}`) ? 'retirement' : 'investment' });
     }
@@ -256,6 +261,6 @@ export default {
     const detail = out.map((a, i) => { const x = kinds.get(a.id) ?? {}; return `account ${i + 1}: ${x.acctType} / ${x.acctSubType}${x.managedAcctDetail ? ' / managed' : ''}${x.workplacePlanDetail?.planId ? ' / workplace plan' : ''}, balance ${a.balance ? 'non-zero' : 'zero'}, ${a.holdings?.length ?? 0} holdings, ${a.transactions.length} transactions, ${a.history?.length ?? 0} past values`; });
     const summaryPositions = captured.filter((c) => /\/portfolio\/api\/GetPositions$/.test(c.url));
     detail.push(`summary positions answers: ${summaryPositions.length}, accounts in them: ${summaryPositions.map((c) => (c.body?.position?.acctDetails?.acctDetail ?? []).length).join(',')}, of which known: ${summaryPositions.map((c) => (c.body?.position?.acctDetails?.acctDetail ?? []).filter((d) => accounts.has(d.acctNum)).length).join(',')}`);
-    return { accounts: out, detail, note: `${holdings} holdings, ${out.reduce((s, a) => s + a.transactions.length, 0)} transactions, past values for ${histories} accounts${skipped ? `, ${skipped} skipped for accounts without a balance` : ''}` };
+    return { accounts: out, drop, detail, note: `${drop.length ? `${drop.length} linked outside accounts left out, ` : ''}${holdings} holdings, ${out.reduce((s, a) => s + a.transactions.length, 0)} transactions, past values for ${histories} accounts${skipped ? `, ${skipped} skipped for accounts without a balance` : ''}` };
   },
 };

@@ -96,6 +96,22 @@ export function saveSnapshot(bankId, snap) {
   }
 }
 
+/** Forget accounts of one institution entirely: used when a source turns out not to own them. */
+export function removeAccounts(bankId, ids) {
+  let removed = 0;
+  db.exec('BEGIN');
+  try {
+    for (const raw of ids ?? []) {
+      const id = `${bankId}:${raw}`;
+      db.prepare('UPDATE transactions SET transfer_id = NULL WHERE transfer_id IN (SELECT id FROM transactions WHERE account_id = ?)').run(id);
+      for (const table of ['transactions', 'holdings', 'balances']) db.prepare(`DELETE FROM ${table} WHERE account_id = ?`).run(id);
+      removed += Number(db.prepare('DELETE FROM accounts WHERE id = ?').run(id).changes);
+    }
+    db.exec('COMMIT');
+  } catch (e) { db.exec('ROLLBACK'); throw e; }
+  return removed;
+}
+
 export function getAccounts() {
   return db.prepare(`SELECT a.*, b.balance, b.date AS as_of FROM accounts a
     JOIN balances b ON b.account_id = a.id

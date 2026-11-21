@@ -2,7 +2,7 @@ import http from 'node:http';
 import fs from 'node:fs';
 import path from 'node:path';
 import { PUBLIC_DIR, DEMO, dataPath } from './paths.js';
-import { getAccounts, getNetWorth, getNetWorthByType, getHistoryNote, getHoldings, getTransactions, getCashflow, saveSnapshot, linkTransfers } from './db.js';
+import { getAccounts, getNetWorth, getNetWorthByType, getHistoryNote, getHoldings, getTransactions, getCashflow, saveSnapshot, linkTransfers, removeAccounts } from './db.js';
 import { BANKS } from './banks/index.js';
 import { runSync, state } from './sync.js';
 import { getInsights } from './insights.js';
@@ -80,6 +80,8 @@ const server = http.createServer(async (req, res) => {
       if (!known) return json(res, 400, { error: `This coincell does not have an institution called "${bank}"` });
       if (!Array.isArray(snapshot?.accounts)) return json(res, 400, { error: 'Nothing to import' });
       saveSnapshot(bank, snapshot);
+      const removed = Array.isArray(snapshot.drop) ? removeAccounts(bank, snapshot.drop) : 0;
+      if (removed) console.log(`[${bank}] removed ${removed} accounts that belong to other institutions`);
       const linked = linkTransfers();
       state.last = { bank, ok: true, at: new Date().toISOString(), message: `${known.name}: ${snapshot.accounts.length} accounts received from the browser extension` };
       console.log(`[${bank}] ${snapshot.accounts.length} accounts from the extension, ${linked} new transfers matched`);
