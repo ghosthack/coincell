@@ -130,7 +130,7 @@ function drawFlow(d) {
   const c = begin(box, height);
   if (!c) return;
   const { svg, W, H } = c;
-  const narrow = W < 620, labelL = narrow ? 110 : 190, labelR = narrow ? 120 : 200, node = 8, pad = 10;
+  const narrow = W < 620, labelL = narrow ? 150 : 300, labelR = narrow ? 120 : 200, node = 8, pad = 10;
   const scale = (H - 2 * pad - gap * (right.length - 1) - groupGap) / total;
   const place = (items, extraAt) => {
     const used = items.reduce((a, x) => a + Math.max(2, x.value * scale), 0) + gap * (items.length - 1) + (extraAt ? groupGap : 0);
@@ -155,8 +155,9 @@ function drawFlow(d) {
   const clip = (text, max) => (text.length > max ? text.slice(0, max - 1) + '…' : text);
   for (const it of left) {
     svg.append(s('rect', { x: xl, y: it.y, width: node, height: it.h, rx: 2, fill: it.color }),
-      s('text', { x: xl - 8, y: it.y + it.h / 2 - 2, 'text-anchor': 'end', class: 'ink' }, clip(nice(it.name), narrow ? 16 : 30)),
-      s('text', { x: xl - 8, y: it.y + it.h / 2 + 11, 'text-anchor': 'end' }, money(it.value)));
+      // one line per source, mirroring the right side: amount in its own column, name beside the bar
+      s('text', { x: xl - 8, y: it.y + it.h / 2 + 4, 'text-anchor': 'end', class: 'ink' }, clip(nice(it.name), narrow ? 14 : 36)),
+      s('text', { x: 2, y: it.y + it.h / 2 + 4 }, money(it.value)));
   }
   for (const it of right) {
     svg.append(s('rect', { x: xr, y: it.y, width: node, height: it.h, rx: 2, fill: it.color }),

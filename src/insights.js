@@ -291,14 +291,14 @@ function moneyFlow(txns, cfg, months) {
     if (c.principal) principal += c.principal;
     if (liquid(t.account_type) && t.transfer_id && t.amount < 0 && (t.other_type === 'investment' || t.other_type === 'retirement')) invested -= t.amount;
   }
-  if (contributions) sources.set('RETIREMENT CONTRIBUTIONS & MATCH', contributions);
+  if (contributions) sources.set('PAID STRAIGHT INTO INVESTMENTS', contributions);   // payroll deductions, employer match, deposits from outside
   for (const i of spendItems(inMonth, cfg)) add(spend, i.category, i.amount);
   const list = (map) => [...map].map(([name, value]) => ({ name, value: r2(value) })).sort((a, b) => b.value - a.value);
   let spending = list(spend);
   if (spending.length > 8) spending = [...spending.slice(0, 7), { name: 'Everything else', value: r2(spending.slice(7).reduce((s, x) => s + x.value, 0)) }];
   const income = [...sources.values()].reduce((s, v) => s + v, 0), spent = spending.reduce((s, x) => s + x.value, 0);
   const kept = r2(income - spent - contributions - invested - principal); // change in cash, net of card balances
-  const saving = [{ name: 'Retirement accounts', value: contributions }, { name: 'Investments', value: invested }, { name: 'Mortgage principal', value: r2(principal) }, { name: 'Kept in cash', value: Math.max(0, kept) }].filter((x) => x.value > 0);
+  const saving = [{ name: 'Investment accounts', value: contributions }, { name: 'Moved to investments', value: invested }, { name: 'Mortgage principal', value: r2(principal) }, { name: 'Kept in cash', value: Math.max(0, kept) }].filter((x) => x.value > 0);
   if (kept < 0) sources.set('DRAWN FROM CASH', -kept);
   return { month, sources: list(sources), spending, saving };
 }
@@ -354,7 +354,7 @@ function advice(d, accounts, cfg) {
   const drift = d.allocation.classes.filter((c) => c.target != null).map((c) => ({ ...c, gap: c.share - c.target }));
   const over = drift.filter((c) => c.gap > 0.03).sort((a, b) => b.gap - a.gap)[0], under = drift.filter((c) => c.gap < -0.03 && c.name !== 'Cash').sort((a, b) => a.gap - b.gap)[0];
   if (over && under) {
-    const deposit = d.flow?.saving.find((s) => s.name === 'Investments')?.value;
+    const deposit = d.flow?.saving.find((s) => s.name === 'Moved to investments')?.value;
     say('idea', 'Rebalance with new money', `${over.name} is ${(over.gap * 100).toFixed(0)} points over target and ${under.name} is ${(-under.gap * 100).toFixed(0)} points under (${$(-under.gap * d.allocation.total)}).`
       + (deposit ? ` Pointing the ${$(deposit)} monthly deposit at ${under.name} closes the gap gradually without selling anything.` : ' Directing new deposits there closes the gap without selling.'));
   }
