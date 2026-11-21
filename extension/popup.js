@@ -20,7 +20,9 @@ function show(results) {
     const mark = document.createElement('b'); mark.textContent = r.ok ? '✓' : '✕';
     const name = document.createElement('b'); name.textContent = r.name;
     const msg = document.createElement('span'); msg.textContent = r.message;
-    row.append(mark, name, msg); return row;
+    row.append(mark, name, msg);
+    for (const w of r.warnings ?? []) { const warn = document.createElement('span'); warn.className = 'warn'; warn.textContent = `⚠ ${w}`; row.append(warn); }   // less than last time: the site may have changed
+    return row;
   }));
   if (!results.length) $('results').textContent = 'No open tab is on a site coincell knows.';
 }

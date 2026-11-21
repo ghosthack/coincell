@@ -66,6 +66,12 @@ try {
   console.log(`data check  -> ${lines.filter((l) => l.startsWith('ok')).length} passed, ${lines.filter((l) => l.startsWith('FAIL')).length} failed: ${lines.at(-1)}`);
   if (verify.status !== 0) { fail('what the extension sent does not match the fake sites'); console.log(lines.filter((l) => l.startsWith('FAIL')).join('\n')); }
 
+  // A site that changed: send Meridian again with an account, the holdings and the transactions gone.
+  const thin = await (await fetch('http://localhost:4690/api/import', { method: 'POST', headers: { 'content-type': 'application/json', 'x-coincell': '1' },
+    body: JSON.stringify({ bank: 'meridian', snapshot: { accounts: [{ id: 'Z31-553318', name: 'Individual Brokerage', type: 'investment', balance: 36000 }] } }) })).json();
+  for (const w of thin.warnings ?? []) console.log('thin import ->', w);
+  if ((thin.warnings ?? []).length < 3) fail('a much thinner import should have raised warnings about missing accounts, holdings and transactions');
+
   // Recording: the layout of a site, none of its values.
   const tabId = await worker.evaluate(async () => (await chrome.tabs.query({ url: 'http://localhost:4702/*' }))[0].id);
   p = await popup(`?tab=${tabId}`); await p.click('#record'); await p.waitForFunction(() => /Stop/.test(document.getElementById('record').textContent));

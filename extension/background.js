@@ -116,7 +116,7 @@ function sendRecord(site, log, ok, message) {
     const key = `${c.method} ${where} ${c.status}${c.body == null ? ' (no data)' : ''}`;
     tally.set(key, (tally.get(key) ?? 0) + 1);
   }
-  return { kind: 'send', at: new Date().toISOString(), site: site.id, extension: chrome.runtime.getManifest().version, ok, message, steps: log.steps, detail: log.detail, asked: log.asked,
+  return { kind: 'send', at: new Date().toISOString(), site: site.id, extension: chrome.runtime.getManifest().version, ok, message, steps: log.steps, detail: log.detail, asked: log.asked, warnings: log.warnings,
     answers: [...tally].map(([what, times]) => `${times}x ${what}`).filter((line) => !/analytics|clix|content|offers|insight|marketing|notification|news|logo|quote|flags|audit/i.test(line)).slice(0, 150) };
 }
 
@@ -129,7 +129,8 @@ async function sendSite(tab) {
     const { note, detail, ...snapshot } = await (site.capture ? readByCapture(tab, site, log) : readDirect(tab, site));
     log.detail = detail;
     const out = await post(TARGETS[site.target], '/api/import', { bank: site.id, snapshot });
-    result = { ok: true, name: site.name, message: `${out.accounts} account${out.accounts === 1 ? '' : 's'} sent${note ? `, ${note}` : ''}` };
+    result = { ok: true, name: site.name, message: `${out.accounts} account${out.accounts === 1 ? '' : 's'} sent${note ? `, ${note}` : ''}`, warnings: out.warnings ?? [] };
+    log.warnings = result.warnings;
   } catch (e) {
     result = { ok: false, name: site.name, message: e.message };
   }

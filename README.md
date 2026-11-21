@@ -55,6 +55,11 @@ activity pages, and stop. The recording goes to `.data/recordings/` and holds th
 data with every value masked; it is what a new site script is written from. Site scripts live in
 `extension/sites/` and are listed in `extension/sites.js`.
 
+Sites change, and a script can start bringing less without failing outright. Each import is compared with what
+was on record: missing accounts, a sharp drop in holdings or transactions, or holdings that no longer add up to
+the balance show as warnings in the popup. Every send also leaves a record in `.data/recordings/` of which of the
+site's services answered, with no financial data, which is the first thing to read when something breaks.
+
 `npm run demo:test-extension` runs the whole thing against the made-up institutions and checks the result.
 
 ## Insights tab

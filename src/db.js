@@ -96,6 +96,25 @@ export function saveSnapshot(bankId, snap) {
   }
 }
 
+/** What is on record for one institution, for comparing an import against (see checks.js). */
+// Transactions are counted over the period the import itself covers. A site may only reach back
+// 90 days or two years, while the record keeps everything it has ever seen, so comparing against
+// the whole record would cry wolf once the record outgrows the site's window. An account that
+// sent nothing is compared with its last 60 days on record.
+export function bankSummary(bankId, snapshot) {
+  const since = new Map((snapshot?.accounts ?? []).map((a) => [String(a.id), (a.transactions ?? []).map((t) => t.date).sort()[0]]));
+  const d = new Date(); d.setDate(d.getDate() - 60);
+  const recent = today(d);
+  const counted = db.prepare('SELECT COUNT(*) AS n FROM transactions WHERE account_id = ? AND date >= ?');
+  return db.prepare(`SELECT a.id, a.name, a.type,
+      (SELECT balance FROM balances WHERE account_id = a.id ORDER BY date DESC LIMIT 1) AS balance,
+      (SELECT COUNT(*) FROM holdings h WHERE h.account_id = a.id AND h.date = (SELECT MAX(date) FROM holdings WHERE account_id = a.id)) AS holdings
+    FROM accounts a WHERE a.bank = ?`).all(bankId).map((r) => {
+    const id = r.id.slice(bankId.length + 1);
+    return { ...r, id, transactions: counted.get(r.id, since.get(id) ?? recent).n, recent: counted.get(r.id, recent).n };
+  });
+}
+
 /** Forget accounts of one institution entirely: used when a source turns out not to own them. */
 export function removeAccounts(bankId, ids) {
   let removed = 0;

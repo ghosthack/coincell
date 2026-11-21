@@ -2,7 +2,8 @@ import http from 'node:http';
 import fs from 'node:fs';
 import path from 'node:path';
 import { PUBLIC_DIR, DEMO, dataPath } from './paths.js';
-import { getAccounts, getNetWorth, getNetWorthByType, getHistoryNote, getHoldings, getTransactions, getCashflow, saveSnapshot, linkTransfers, removeAccounts } from './db.js';
+import { getAccounts, getNetWorth, getNetWorthByType, getHistoryNote, getHoldings, getTransactions, getCashflow, saveSnapshot, linkTransfers, removeAccounts, bankSummary } from './db.js';
+import { compareWithLastTime } from './checks.js';
 import { BANKS } from './banks/index.js';
 import { runSync, state } from './sync.js';
 import { getInsights } from './insights.js';
@@ -79,13 +80,15 @@ const server = http.createServer(async (req, res) => {
       const known = BANKS.find((b) => b.id === bank);
       if (!known) return json(res, 400, { error: `This coincell does not have an institution called "${bank}"` });
       if (!Array.isArray(snapshot?.accounts)) return json(res, 400, { error: 'Nothing to import' });
+      const warnings = compareWithLastTime(bankSummary(bank, snapshot).filter((b) => !(snapshot.drop ?? []).includes(b.id)), snapshot);
       saveSnapshot(bank, snapshot);
       const removed = Array.isArray(snapshot.drop) ? removeAccounts(bank, snapshot.drop) : 0;
       if (removed) console.log(`[${bank}] removed ${removed} accounts that belong to other institutions`);
       const linked = linkTransfers();
-      state.last = { bank, ok: true, at: new Date().toISOString(), message: `${known.name}: ${snapshot.accounts.length} accounts received from the browser extension` };
+      state.last = { bank, ok: !warnings.length, at: new Date().toISOString(), message: `${known.name}: ${snapshot.accounts.length} accounts received from the browser extension${warnings.length ? `. Check: ${warnings.join(' ')}` : ''}` };
+      for (const w of warnings) console.log(`[${bank}] WARNING ${w}`);
       console.log(`[${bank}] ${snapshot.accounts.length} accounts from the extension, ${linked} new transfers matched`);
-      return json(res, 200, { accounts: snapshot.accounts.length, linked });
+      return json(res, 200, { accounts: snapshot.accounts.length, linked, warnings });
     }
     if (route === 'POST /api/recordings') {
       const { host, entry } = await readBody(req);
