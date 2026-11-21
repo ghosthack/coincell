@@ -6,17 +6,57 @@
   window.__coincellRecording = true;
   const emit = (entry) => window.postMessage({ __coincellRecord: entry }, location.origin);
 
+  // Field names and types, values removed. For a list, the fields of ALL its items are merged,
+  // since rows of different kinds carry different fields. A list of saved answers (items with a
+  // `url` and a `response`, as some sites bundle them) is laid out per address. The only values
+  // kept are short labels in fields named "...Type" or "...Code", which say what kind of thing
+  // a row is ("CHECKING", "POSITION"), never who or how much.
+  const label = (k, x) => /(type|code|category|status)$/i.test(k) && typeof x === 'string' && /^[A-Za-z][A-Za-z _-]{0,23}$/.test(x);
   const shape = (v, depth = 0) => {
     if (v === null) return 'null';
-    if (Array.isArray(v)) return v.length ? [shape(v[0], depth + 1), `(${v.length} items)`] : [];
-    if (typeof v === 'object') return depth > 8 ? '{...}' : Object.fromEntries(Object.entries(v).map(([k, x]) => [k, shape(x, depth + 1)]));
+    if (Array.isArray(v)) {
+      if (!v.length) return [];
+      if (!v.every((x) => x && typeof x === 'object' && !Array.isArray(x))) return [shape(v[0], depth + 1), `(${v.length} items)`];
+      if (v.every((x) => typeof x.url === 'string' && 'response' in x)) {
+        const perUrl = {};
+        for (const x of v) { const u = cleanUrl(x.url).replace(location.origin, ''); perUrl[u] = perUrl[u] ? mergeShapes(perUrl[u], shape(x, depth + 1)) : shape(x, depth + 1); }
+        return [{ 'saved answers, by address': perUrl }, `(${v.length} items)`];
+      }
+      let merged = {};
+      const labels = {};
+      for (const item of v) {
+        for (const [k, x] of Object.entries(item)) if (label(k, x)) (labels[k] ??= new Set()).add(x);
+        merged = mergeShapes(merged, shape(item, depth + 1));
+      }
+      for (const [k, set] of Object.entries(labels)) merged[k.replace(/[0-9]{4,}/g, '#')] = `one of: ${[...set].slice(0, 16).join(' | ')}`;
+      return [merged, `(${v.length} items)`];
+    }
+    if (typeof v === 'object') {
+      if (depth > 10) return '{...}';
+      return Object.fromEntries(Object.entries(v).map(([k, x]) => [k.replace(/[0-9]{4,}/g, '#'), label(k, x) ? `label: ${x}` : shape(x, depth + 1)]));
+    }
     if (typeof v === 'string') return /^-?[\d,.]+$/.test(v) ? 'numeric-string' : /^\d{4}-\d{2}-\d{2}/.test(v) ? 'date-string' : 'string';
     return typeof v;
   };
+  const mergeShapes = (a, b) => {
+    if (a && b && typeof a === 'object' && typeof b === 'object' && !Array.isArray(a) && !Array.isArray(b)) {
+      const out = { ...a };
+      for (const [k, x] of Object.entries(b)) out[k] = k in out ? mergeShapes(out[k], x) : x;
+      return out;
+    }
+    if (Array.isArray(a) && Array.isArray(b)) return a.length && b.length ? [mergeShapes(a[0], b[0]), a[1]] : a.length ? a : b;
+    if (typeof a === 'string' && typeof b === 'string' && a !== b && a.startsWith('label: ') && b.startsWith('label: ')) return `one of: ${a.slice(7)} | ${b.slice(7)}`;
+    if (typeof a === 'string' && a.startsWith('one of: ') && typeof b === 'string' && b.startsWith('label: ')) return a.includes(b.slice(7)) ? a : `${a} | ${b.slice(7)}`;
+    return a === 'null' || a === undefined ? b : a;
+  };
+  // An address with its identifying parts removed. Query values are kept only when they are a
+  // plain word, true/false or a number under 1000 ("DESC", "true", "50"): settings, not identities.
+  // The part after # (the page's route inside the site) is kept, with long numbers removed.
+  const safeWord = (v) => /^(true|false|[A-Za-z][A-Za-z_-]{0,24}|\d{1,3})$/.test(v);
   const cleanUrl = (u) => {
     const x = new URL(u, location.href);
-    for (const k of [...x.searchParams.keys()]) x.searchParams.set(k, '_');
-    return x.origin + x.pathname.replace(/[0-9a-f-]{16,}|\d{4,}/gi, ':id') + x.search;
+    for (const [k, v] of [...x.searchParams.entries()]) x.searchParams.set(k, safeWord(v) ? v : '_');
+    return x.origin + x.pathname.replace(/[0-9a-f-]{16,}|\d{4,}/gi, ':id') + x.search + x.hash.replace(/[0-9a-f-]{16,}|\d{4,}/gi, ':id').replace(/=[^&;/]*[a-z][^&;/]*/g, (m) => (safeWord(m.slice(1)) ? m : '=_'));
   };
   // Only the site's own services matter; analytics, chat widgets and the like are skipped.
   const siteRoot = location.hostname.split('.').slice(-2).join('.');
@@ -28,8 +68,9 @@
   // operations and the text of queries are kept, since they are part of the site, not of you.
   const maskValues = (v, key = '', depth = 0) => {
     if (v === null || typeof v === 'boolean') return v;
-    if (typeof v === 'number') return 'number';
-    if (typeof v === 'string') return /^(operationName|operation)$/i.test(key) ? v : /^query$/i.test(key) ? v.slice(0, 4000).replace(/[0-9]{4,}/g, '#') : mask(v);
+    if (typeof v === 'number') return Number.isInteger(v) && Math.abs(v) < 1000 ? v : 'number';   // small counts are settings
+    if (typeof v === 'string') return /^(operationName|operation)$/i.test(key) ? v : /^query$/i.test(key) ? v.slice(0, 4000).replace(/[0-9]{4,}/g, '#')
+      : /^(true|false|[A-Z][A-Z_]{1,40})$/.test(v) ? v : mask(v);   // CAPITAL_WORDS are the site's own constants; everything else is masked
     if (Array.isArray(v)) return v.length ? [maskValues(v[0], key, depth + 1), `(${v.length} items)`] : [];
     return depth > 8 ? '{...}' : Object.fromEntries(Object.entries(v).map(([k, x]) => [k, maskValues(x, k, depth + 1)]));
   };
@@ -37,7 +78,7 @@
     if (body == null || body === '') return undefined;
     if (typeof body !== 'string') return `(${body.constructor?.name ?? typeof body})`;
     try { return maskValues(JSON.parse(body)); } catch { /* not JSON */ }
-    if (/^[\w.%+-]+=/.test(body)) return Object.fromEntries([...new URLSearchParams(body)].map(([k, v]) => [k, mask(v)]));
+    if (/^[\w.%+-]+=/.test(body)) return { '(sent as a form)': Object.fromEntries([...new URLSearchParams(body)].map(([k, v]) => [k, maskValues(v)])) };
     return `(text, ${body.length} characters)`;
   };
   const headerNames = (h) => { try { return h ? [...new Headers(h).keys()] : []; } catch { return []; } };
