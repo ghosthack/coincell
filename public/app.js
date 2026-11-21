@@ -249,7 +249,7 @@ function showStatus(st) {
   if (st.running) return box.replaceChildren(`Syncing… ${st.log.at(-1) ?? ''}`);
   if (!st.last) return box.replaceChildren();
   box.replaceChildren(el('span', { class: `mark ${st.last.ok ? 'ok' : 'bad'}` }, st.last.ok ? '✓ ' : '✕ '),
-    `${st.last.ok ? '' : 'Sync failed: '}${st.last.message} · ${new Date(st.last.at).toLocaleTimeString()}`);
+    `${st.last.ok ? '' : 'Check: '}${st.last.message} · ${new Date(st.last.at).toLocaleTimeString(undefined, { hour: 'numeric', minute: '2-digit' })}`);
 }
 
 async function poll() {

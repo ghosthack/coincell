@@ -85,7 +85,7 @@ const server = http.createServer(async (req, res) => {
       const removed = Array.isArray(snapshot.drop) ? removeAccounts(bank, snapshot.drop) : 0;
       if (removed) console.log(`[${bank}] removed ${removed} accounts that belong to other institutions`);
       const linked = linkTransfers();
-      state.last = { bank, ok: !warnings.length, at: new Date().toISOString(), message: `${known.name}: ${snapshot.accounts.length} accounts received from the browser extension${warnings.length ? `. Check: ${warnings.join(' ')}` : ''}` };
+      state.last = { bank, ok: !warnings.length, at: new Date().toISOString(), message: `${known.name}: ${snapshot.accounts.length} account${snapshot.accounts.length === 1 ? '' : 's'} received${warnings.length ? `. ${warnings.join(' ')}` : ''}` };
       for (const w of warnings) console.log(`[${bank}] WARNING ${w}`);
       console.log(`[${bank}] ${snapshot.accounts.length} accounts from the extension, ${linked} new transfers matched`);
       return json(res, 200, { accounts: snapshot.accounts.length, linked, warnings });

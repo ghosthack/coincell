@@ -44,7 +44,7 @@ export async function runSync(bankId) {
     }
     const linked = linkTransfers();
     const done = banks.length - failed.length;
-    const message = `${done} of ${banks.length} institution${banks.length === 1 ? '' : 's'} synced, ${accounts} accounts, ${linked} new transfers matched`
+    const message = `${done} of ${banks.length} institution${banks.length === 1 ? '' : 's'} synced, ${accounts} account${accounts === 1 ? '' : 's'}${linked ? `, ${linked} new transfer${linked === 1 ? '' : 's'} matched` : ''}`
       + (failed.length ? `. Failed: ${failed.join('; ')}` : '');
     console.log(message);
     state.last = { bank: bankId, ok: !failed.length, at: new Date().toISOString(), message };
