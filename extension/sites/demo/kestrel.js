@@ -17,10 +17,10 @@ export default {
     },
   }],
   build(captured) {
-    const summary = captured.find((c) => /\/card\/summary/.test(c.url) && c.body.card)?.body;
+    const summary = captured.find((c) => /\/card\/summary/.test(c.url) && c.body?.card)?.body;
     if (!summary) throw new Error('The card summary did not load');
     const seen = new Map();   // the card shows purchases as positive; coincell stores them as negative
-    for (const c of captured) for (const t of c.body.items ?? []) seen.set(t.id, { id: t.id, date: t.postedAt.slice(0, 10), description: t.merchant, amount: -t.amountCents / 100 });
+    for (const c of captured) for (const t of c.body?.items ?? []) seen.set(t.id, { id: t.id, date: t.postedAt.slice(0, 10), description: t.merchant, amount: -t.amountCents / 100 });
     const transactions = [...seen.values()], balance = -summary.currentBalanceCents / 100;
     return { accounts: [{ id: summary.card.last4, name: summary.card.productName, type: 'credit', mask: summary.card.last4, balance, transactions,
       creditLimit: summary.creditLimitCents / 100, dueAmount: summary.remainingStatementBalanceCents / 100, dueDate: summary.paymentDueDate,

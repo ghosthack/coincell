@@ -52,13 +52,14 @@ async function readDirect(tab, site) {
 }
 
 /** Read a site by opening its own pages in the tab and collecting the answers they receive. */
-async function readByCapture(tab, site) {
+async function readByCapture(tab, site, log) {
   const origin = new URL(tab.url).origin, id = `capture_${site.id}`, plan = site.capture;
   await chrome.scripting.unregisterContentScripts({ ids: [id] }).catch(() => {});
   await chrome.scripting.registerContentScripts([{ id, matches: [`${origin}/*`], js: ['capture-main.js'], world: 'MAIN', runAt: 'document_start' }]);
   try {
-    const captured = [];
+    const captured = log.captured;
     for (const step of plan.steps) {
+      log.steps.push(step.live ? 'live page' : step.go);
       if (step.live) {   // no loading of pages: start capturing on the page as it is, and let the step drive it
         if (plan.loggedOut?.test(new URL(tab.url).pathname + new URL(tab.url).hash)) throw new Error(LOGIN_FIRST);
         await chrome.scripting.executeScript({ target: { tabId: tab.id }, files: ['capture-main.js'], world: 'MAIN' });
@@ -102,16 +103,35 @@ async function readByCapture(tab, site) {
   }
 }
 
+// A record of each send, for working out what went wrong without anyone having to read the popup
+// aloud: which pages were visited, which of the site's services answered and how, and the outcome.
+// Addresses only, with numbers and long codes removed; nothing that was sent or received.
+function sendRecord(site, log, ok, message) {
+  const tally = new Map();
+  for (const c of log.captured) {
+    let where = c.url;
+    try { const u = new URL(c.url); where = u.pathname.replace(/[A-Za-z0-9_-]{24,}/g, ':token').replace(/\d{4,}/g, '#'); } catch { /* keep as is */ }
+    const key = `${c.method} ${where} ${c.status}${c.body == null ? ' (no data)' : ''}`;
+    tally.set(key, (tally.get(key) ?? 0) + 1);
+  }
+  return { kind: 'send', at: new Date().toISOString(), site: site.id, extension: chrome.runtime.getManifest().version, ok, message, steps: log.steps,
+    answers: [...tally].map(([what, times]) => `${times}x ${what}`).filter((line) => !/analytics|clix|content|offers|insight|marketing|notification|news|logo|quote|flags|audit/i.test(line)).slice(0, 150) };
+}
+
 async function sendSite(tab) {
   const site = siteFor(tab.url);
   if (!site) return { ok: false, name: new URL(tab.url).hostname, message: 'coincell does not know this site yet.' };
+  const log = { steps: [], captured: [] };
+  let result;
   try {
-    const { note, ...snapshot } = await (site.capture ? readByCapture(tab, site) : readDirect(tab, site));
+    const { note, ...snapshot } = await (site.capture ? readByCapture(tab, site, log) : readDirect(tab, site));
     const out = await post(TARGETS[site.target], '/api/import', { bank: site.id, snapshot });
-    return { ok: true, name: site.name, message: `${out.accounts} account${out.accounts === 1 ? '' : 's'} sent${note ? `, ${note}` : ''}` };
+    result = { ok: true, name: site.name, message: `${out.accounts} account${out.accounts === 1 ? '' : 's'} sent${note ? `, ${note}` : ''}` };
   } catch (e) {
-    return { ok: false, name: site.name, message: e.message };
+    result = { ok: false, name: site.name, message: e.message };
   }
+  if (site.capture) await post(TARGETS[site.target], '/api/recordings', { host: `${site.id}.sends`, entry: sendRecord(site, log, result.ok, result.message) }).catch(() => {});
+  return result;
 }
 
 // ---- recording: learn how an unknown site is built, without keeping any of its values ----

@@ -1,6 +1,7 @@
 import { siteFor } from './sites.js';
 
 const $ = (id) => document.getElementById(id);
+$('version').textContent = `coincell extension ${chrome.runtime.getManifest().version}`;
 // Normally the popup acts on the tab you are looking at; ?tab=<id> lets a test point it at one.
 const wanted = Number(new URLSearchParams(location.search).get('tab'));
 const tab = wanted ? await chrome.tabs.get(wanted) : (await chrome.tabs.query({ active: true, currentWindow: true }))[0];

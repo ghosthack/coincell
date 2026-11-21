@@ -90,6 +90,7 @@ const server = http.createServer(async (req, res) => {
       const safe = String(host ?? '').toLowerCase().replace(/[^a-z0-9.-]/g, '');
       if (!safe || !entry) return json(res, 400, { error: 'Nothing to record' });
       fs.appendFileSync(dataPath('recordings', `${safe}.extension.jsonl`), JSON.stringify(entry) + '\n');
+      if (entry.kind === 'send') console.log(`[${entry.site}] send ${entry.ok ? 'ok' : 'FAILED'}: ${entry.message}`);
       return json(res, 200, { ok: true });
     }
     json(res, 404, { error: 'Not found' });

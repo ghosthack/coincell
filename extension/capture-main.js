@@ -9,7 +9,10 @@
   const same = (u) => { try { const h = new URL(u, location.href).hostname; return h === root || h.endsWith(`.${root}`); } catch { return false; } };
   const keep = (method, url, status, text, sent) => {
     if (!same(url)) return;
-    try { store.push({ at: Date.now(), method, url: new URL(url, location.href).href, status, body: JSON.parse(text), sent }); if (store.length > 1500) store.shift(); } catch { /* not JSON */ }
+    let body = null;
+    try { body = JSON.parse(text); } catch { /* not JSON: keep the fact that it was asked and how it was answered */ }
+    store.push({ at: Date.now(), method, url: new URL(url, location.href).href, status, body, sent });
+    if (store.length > 1500) store.shift();
   };
   const realFetch = window.fetch;
   window.fetch = async function (input, init) {
@@ -25,6 +28,7 @@
     const res = await realFetch.apply(this, arguments);
     try {
       if ((res.headers.get('content-type') ?? '').includes('json')) res.clone().text().then((t) => keep(method, res.url || url, res.status, t, sent), () => {});
+      else if (!res.ok) keep(method, res.url || url, res.status, '', sent);   // a refusal is worth knowing about
     } catch { /* never disturb the page */ }
     return res;
   };
