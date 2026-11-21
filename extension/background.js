@@ -75,10 +75,14 @@ async function readByCapture(tab, site, log) {
       else await chrome.tabs.update(tab.id, { url: origin + step.go });
       if (step.reload) await chrome.tabs.reload(tab.id);   // a change after the # alone does not load the page afresh
       const patterns = step.waitFor.map((r) => r.source), deadline = Date.now() + (step.timeout ?? 40_000);
+      let onLoginPage = 0;
       for (;;) {
         await sleep(400);
         const now = await chrome.tabs.get(tab.id);
-        if (now.status === 'complete' && plan.loggedOut?.test(new URL(now.url).pathname + new URL(now.url).hash)) throw new Error(LOGIN_FIRST);
+        // A sign-in page that the tab only passes through on its way back in does not count:
+        // it has to still be there after a few seconds.
+        onLoginPage = now.status === 'complete' && plan.loggedOut?.test(new URL(now.url).pathname + new URL(now.url).hash) ? onLoginPage + 1 : 0;
+        if (onLoginPage >= 10) throw new Error(LOGIN_FIRST);
         const have = await inPage(tab.id, (ps) => ps.map((p) => (window.__coincellCapture ?? []).some((e) => new RegExp(p).test(e.url) && e.status < 400)), [patterns]).catch(() => null);
         if (have?.every(Boolean)) break;   // null while the page is still loading
         if (Date.now() > deadline) throw new Error(`${site.name} did not load its data${step.go ? ` on ${step.go}` : ''}. Is the page showing an error or a prompt?`);

@@ -10,7 +10,8 @@ const day = (s) => (/^\d{4}-\d{2}-\d{2}/.test(String(s ?? '')) ? String(s).slice
 const usd = (n) => Number(n).toLocaleString('en-US', { style: 'currency', currency: 'USD' });
 
 export default {
-  loggedOut: /\/login|signin|logged-out/i,
+  // Not "signin": a reload passes through /servicing/signin-callback on its way back in.
+  loggedOut: /\/login\b|logged-out|session-expired/i,
   steps: [{
     here: true, timeout: 60_000,
     waitFor: [API],
