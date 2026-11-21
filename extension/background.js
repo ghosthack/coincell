@@ -57,14 +57,15 @@ async function readByCapture(tab, site, log) {
   await chrome.scripting.unregisterContentScripts({ ids: [id] }).catch(() => {});
   await chrome.scripting.registerContentScripts([{ id, matches: [`${origin}/*`], js: ['capture-main.js'], world: 'MAIN', runAt: 'document_start' }]);
   try {
-    const captured = log.captured;
+    const captured = log.captured, shared = {};   // `shared` carries what one step learned on to the next page
     for (const step of plan.steps) {
       log.steps.push(step.live ? 'live page' : step.go);
       if (step.live) {   // no loading of pages: start capturing on the page as it is, and let the step drive it
         if (plan.loggedOut?.test(new URL(tab.url).pathname + new URL(tab.url).hash)) throw new Error(LOGIN_FIRST);
         await chrome.scripting.executeScript({ target: { tabId: tab.id }, files: ['capture-main.js'], world: 'MAIN' });
-        const outcome = await inPage(tab.id, step.act);
+        const outcome = await inPage(tab.id, step.act, [shared]);
         if (outcome?.error) throw new Error(outcome.error);
+        if (outcome && typeof outcome === 'object') Object.assign(shared, outcome);
         await sleep(step.settle ?? 600);
         captured.push(...await inPage(tab.id, () => (window.__coincellCapture ?? []).map(({ method, url, status, body, sent }) => ({ method, url, status, body, sent: sent?.body }))));
         continue;
@@ -88,7 +89,7 @@ async function readByCapture(tab, site, log) {
           await sleep(400);
         }
       }
-      if (step.act) await inPage(tab.id, step.act);
+      if (step.act) { const outcome = await inPage(tab.id, step.act, [shared]); if (outcome && typeof outcome === 'object') Object.assign(shared, outcome); }
       await sleep(step.settle ?? 600);
       captured.push(...await inPage(tab.id, () => (window.__coincellCapture ?? []).map(({ method, url, status, body, sent }) => ({ method, url, status, body, sent: sent?.body }))));
     }

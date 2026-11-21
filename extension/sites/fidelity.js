@@ -135,28 +135,38 @@ export default {
             await sleep(400);
           }
         }
+        return { accounts: valued.map((a) => ({ acctNum: a.acctNum, acctType: a.acctType, name: a.preferenceDetail?.name || a.acctSubTypeDesc || a.acctType })) };
       } },
     { go: '/ftgw/digital/portfolio/positions', waitFor: [/\/portfolio\/api\/GetContext/], alsoWait: [/\/poswebex\/api\/positions$/], settle: 1500 },
     { go: '/ftgw/digital/portfolio/activity', waitFor: [/\/activityapi\/api\/v1\/transactions\/history/], settle: 1500,
-      // The Activity page only loads its default range (about 30 days). To go further back, repeat
-      // the page's own request, unchanged except for the dates, in 90-day steps for up to two years.
-      // Runs in the page; the repeated requests are captured like any other.
-      act: async () => {
+      // Activity, account by account. The Activity page loads about 30 days for a default set of
+      // accounts, which leaves some accounts out altogether. So the page's own request is repeated
+      // for each account in turn, 90 days at a time (the most the page itself offers), going back
+      // about two years or until two periods in a row are empty. Runs in the page.
+      act: async (shared) => {
+        const sleep = (ms) => new Promise((r) => setTimeout(r, ms));
         const first = (window.__coincellCapture ?? []).find((e) => /transactions\/history/.test(e.url) && e.status < 400 && e.sent?.body);
         if (!first) return;
         const asked = JSON.parse(first.sent.body), dates = asked?.filter?.searchCriteriaDetail;
         if (typeof dates?.txnFromDate !== 'number' || typeof dates?.txnToDate !== 'number') return;
         const day = 86400 * (dates.txnToDate > 1e11 ? 1000 : 1);   // the site counts in seconds or in milliseconds
-        let to = dates.txnFromDate, empty = 0;
-        for (let i = 0; i < 8 && empty < 2; i++) {
-          const from = to - 90 * day, body = structuredClone(asked);
-          Object.assign(body.filter.searchCriteriaDetail, { txnFromDate: from, txnToDate: to });
-          const res = await fetch(first.url, { method: 'POST', headers: first.sent.headers, body: JSON.stringify(body), credentials: 'include' });
-          if (!res.ok) break;
-          const got = await res.clone().json().catch(() => null);
-          empty = got?.data?.transactions?.length ? 0 : empty + 1;
-          to = from;
-          await new Promise((r) => setTimeout(r, 900));
+        // Accounts as the page itself describes them, plus any it left out, described the same way.
+        const described = new Map((asked.filter.accounts ?? []).map((a) => [a.acctNum, a]));
+        const everyone = [...described.values()];
+        for (const a of shared?.accounts ?? []) if (!described.has(a.acctNum)) everyone.push({ acctNum: a.acctNum, acctName: a.name, acctType: a.acctType });
+        for (const account of everyone) {
+          let to = dates.txnToDate, empty = 0;
+          for (let i = 0; i < 9 && empty < 2; i++) {
+            const from = to - 90 * day, body = structuredClone(asked);
+            body.filter.accounts = [account];
+            Object.assign(body.filter.searchCriteriaDetail, { txnFromDate: from, txnToDate: to });
+            const res = await fetch(first.url, { method: 'POST', headers: first.sent.headers, body: JSON.stringify(body), credentials: 'include' }).catch(() => null);
+            if (!res?.ok) break;
+            const got = await res.clone().json().catch(() => null);
+            empty = got?.data?.transactions?.length ? 0 : empty + 1;
+            to = from;
+            await sleep(500);
+          }
         }
       } },
   ],
