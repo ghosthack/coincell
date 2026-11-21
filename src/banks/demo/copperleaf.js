@@ -1,8 +1,8 @@
 // Copperleaf Card (demo site): a second credit card.
 // Technique: read the summary off the page, then use the site's own CSV export for transactions.
 import fs from 'node:fs';
-import { parseMoney } from '../browser.js';
-import { balanceHistory, mdyToIso } from '../history.js';
+import { parseMoney } from '../../browser.js';
+import { balanceHistory, mdyToIso } from '../../history.js';
 
 const URL = 'http://localhost:4703';
 

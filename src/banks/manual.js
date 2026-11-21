@@ -1,14 +1,15 @@
-// Things no website reports, such as what your home is worth. Edit manual-assets.json:
+// Things no website reports, such as what your home is worth. Copy manual-assets.example.json
+// to manual-assets.json (it is git-ignored, since it is about you) and edit it:
 //   [{ "id": "home", "name": "Home (my estimate)", "type": "property", "balance": 415000, "since": "2026-06-01" }]
 // `since` (optional) draws the value as a flat line back to that date.
 import fs from 'node:fs';
 import path from 'node:path';
-import { ROOT, today } from '../paths.js';
+import { ROOT, DEMO, today } from '../paths.js';
 
 export default {
   id: 'manual', name: 'Entered by hand', needsBrowser: false,
   async sync({ log }) {
-    const file = path.join(ROOT, 'manual-assets.json');
+    const file = DEMO ? path.join(ROOT, 'fakebanks', 'manual-assets.json') : path.join(ROOT, 'manual-assets.json');
     if (!fs.existsSync(file)) return { accounts: [] };
     const accounts = JSON.parse(fs.readFileSync(file, 'utf8')).map((a) => {
       const history = [];

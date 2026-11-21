@@ -1,13 +1,13 @@
 import http from 'node:http';
 import fs from 'node:fs';
 import path from 'node:path';
-import { PUBLIC_DIR } from './paths.js';
+import { PUBLIC_DIR, DEMO } from './paths.js';
 import { getAccounts, getNetWorth, getNetWorthByType, getHoldings, getTransactions, getCashflow } from './db.js';
 import { BANKS } from './banks/index.js';
 import { runSync, state } from './sync.js';
 import { getInsights } from './insights.js';
 
-const PORT = Number(process.env.PORT) || 4680;
+const PORT = Number(process.env.PORT) || (DEMO ? 4690 : 4680); // demo and real can run side by side
 const HOST = '127.0.0.1'; // never expose financial data beyond this machine
 const TYPES = { '.html': 'text/html; charset=utf-8', '.js': 'text/javascript; charset=utf-8', '.css': 'text/css; charset=utf-8', '.png': 'image/png' };
 
@@ -43,6 +43,7 @@ const server = http.createServer(async (req, res) => {
           breakdown: { cash: sum('cash'), investments: sum('investment'), retirement: sum('retirement'), property: sum('property'), cards: sum('credit'), loans: sum('loan') },
           banks: BANKS.map(({ id, name, needsBrowser }) => ({ id, name, needsBrowser })),
           sync: state,
+          demo: DEMO,
         });
       }
       case 'GET /api/networth': return json(res, 200, getNetWorth());
@@ -77,4 +78,4 @@ const server = http.createServer(async (req, res) => {
   }
 });
 
-server.listen(PORT, HOST, () => console.log(`coincell running at http://localhost:${PORT}`));
+server.listen(PORT, HOST, () => console.log(`coincell${DEMO ? ' (demo data)' : ''} running at http://localhost:${PORT}`));

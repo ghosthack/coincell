@@ -3,7 +3,10 @@ import path from 'node:path';
 import fs from 'node:fs';
 
 export const ROOT = path.resolve(path.dirname(fileURLToPath(import.meta.url)), '..');
-export const DATA_DIR = process.env.COINCELL_DATA || path.join(ROOT, '.data');
+// Demo mode (COINCELL_DEMO=1, or `npm run demo`) uses the made-up institutions in fakebanks/
+// and keeps everything in its own folder, so demo numbers can never mix with real ones.
+export const DEMO = process.env.COINCELL_DEMO === '1';
+export const DATA_DIR = process.env.COINCELL_DATA || path.join(ROOT, DEMO ? '.data-demo' : '.data');
 export const PUBLIC_DIR = path.join(ROOT, 'public');
 
 export function dataPath(...parts) {

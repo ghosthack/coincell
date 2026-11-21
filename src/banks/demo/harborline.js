@@ -2,8 +2,8 @@
 // Technique: plain page scraping, following the "Older" link through each account's pages.
 // The demo credentials are public, so they are typed automatically. A real
 // adapter would instead call waitForLogin() and let you sign in by hand.
-import { parseMoney } from '../browser.js';
-import { balanceHistory, mdyToIso } from '../history.js';
+import { parseMoney } from '../../browser.js';
+import { balanceHistory, mdyToIso } from '../../history.js';
 
 const URL = 'http://localhost:4701';
 

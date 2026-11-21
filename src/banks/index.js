@@ -1,10 +1,16 @@
-import harborline from './harborline.js';
-import kestrel from './kestrel.js';
-import copperleaf from './copperleaf.js';
-import meridian from './meridian.js';
-import lakeshore from './lakeshore.js';
+import { DEMO } from '../paths.js';
 import manual from './manual.js';
+import harborline from './demo/harborline.js';
+import kestrel from './demo/kestrel.js';
+import copperleaf from './demo/copperleaf.js';
+import meridian from './demo/meridian.js';
+import lakeshore from './demo/lakeshore.js';
 
-// Register bank adapters here. (mybank.js is an unregistered template for a real bank.)
-export const BANKS = [harborline, kestrel, copperleaf, meridian, lakeshore, manual];
+// Your real institutions. Copy mybank.js for each one, fill it in, import it and add it here.
+const REAL = [manual];
+
+// The made-up institutions served by fakebanks/, used only in demo mode.
+const DEMO_BANKS = [harborline, kestrel, copperleaf, meridian, lakeshore, manual];
+
+export const BANKS = DEMO ? DEMO_BANKS : REAL;
 export const getBank = (id) => BANKS.find((b) => b.id === id);

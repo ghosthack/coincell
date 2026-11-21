@@ -1,7 +1,7 @@
 // Kestrel Card (demo site): a credit card served by a single-page app.
 // Technique: listen to the JSON the app itself loads, pressing "Load more" until done.
-import { captureJson } from '../browser.js';
-import { balanceHistory } from '../history.js';
+import { captureJson } from '../../browser.js';
+import { balanceHistory } from '../../history.js';
 
 const URL = 'http://localhost:4702';
 

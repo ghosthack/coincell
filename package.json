@@ -9,9 +9,13 @@
     "start": "node src/server.js",
     "sync": "node src/sync.js",
     "record": "node src/record.js",
-    "fakebanks": "node fakebanks/server.js"
+    "demo": "node scripts/demo.js",
+    "demo:sync": "COINCELL_DEMO=1 node src/sync.js all",
+    "demo:verify": "node scripts/verify-fake.js"
   },
-  "engines": { "node": ">=22.5" },
+  "engines": {
+    "node": ">=22.5"
+  },
   "dependencies": {
     "playwright": "^1.50.0"
   }

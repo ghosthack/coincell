@@ -5,6 +5,7 @@ let currency = 'USD';
 let series = [];
 let rangeDays = Number(localStorage.getItem('range') ?? 90);
 let seriesByType = [];
+let noDataHint = 'No data yet.';
 let nwMode = localStorage.getItem('nwMode') ?? 'total';
 
 const money = (n, opts = {}) => n == null ? '–' : new Intl.NumberFormat(undefined, { style: 'currency', currency, ...opts }).format(n);
@@ -61,7 +62,7 @@ function drawChart() {
   const pts = inRange(series);
   $('nw-legend').hidden = nwMode !== 'type';
   if (nwMode === 'type' && pts.length) return window.drawNetWorthByType(box, inRange(seriesByType), $('nw-legend'));
-  if (!pts.length) return box.append(el('div', { class: 'empty' }, series.length ? 'No snapshots in this range.' : 'No data yet. Pick a bank and press “Sync now”.'));
+  if (!pts.length) return box.append(el('div', { class: 'empty' }, series.length ? 'No snapshots in this range.' : noDataHint));
 
   const W = box.clientWidth, H = box.clientHeight;
   if (!W) return; // tab is hidden
@@ -157,6 +158,8 @@ async function load() {
   currency = accounts[0]?.currency ?? 'USD';
   series = networth;
   $('networth').textContent = accounts.length ? money(overview.netWorth) : '–';
+  $('demo-tag').hidden = !overview.demo;
+  noDataHint = overview.demo ? 'No data yet. Press “Sync now”.' : overview.banks.some((b) => b.needsBrowser) ? 'No data yet. Press “Sync now”.' : 'No institutions connected yet. Run “npm run demo” to explore with made-up data.';
 
   if (!$('bank').options.length) {
     $('bank').append(el('option', { value: 'all' }, 'All institutions'), ...overview.banks.map((b) => el('option', { value: b.id }, b.name)));

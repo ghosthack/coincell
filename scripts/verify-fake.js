@@ -1,7 +1,8 @@
 // Compare what the scrapers stored against what the fake institutions actually hold.
-// Run after `npm run fakebanks` + a full sync:  node scripts/verify-fake.js
-import { buildWorld } from '../fakebanks/world.js';
-import { getAccounts, getTransactions, getNetWorth, getCashflow } from '../src/db.js';
+// Run while `npm run demo` is up and after a sync:  npm run demo:verify
+process.env.COINCELL_DEMO = '1'; // always check the demo data, never the real folder
+const { buildWorld } = await import('../fakebanks/world.js');
+const { getAccounts, getTransactions, getNetWorth, getCashflow } = await import('../src/db.js');
 
 const w = buildWorld().accounts;
 const truth = { 'harborline:chk': w.chk, 'harborline:sav': w.sav, 'kestrel:0085': w.kes, 'copperleaf:7731': w.cop,

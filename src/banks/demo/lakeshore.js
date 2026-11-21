@@ -3,9 +3,9 @@
 // the drop in what you owe, because part of it is interest and escrow. Each
 // payment is stored with its full amount (so it pairs with the checking debit)
 // plus the `principal` part, which is the only part that reduces the debt.
-import { parseMoney } from '../browser.js';
-import { mdyToIso } from '../history.js';
-import { today } from '../paths.js';
+import { parseMoney } from '../../browser.js';
+import { mdyToIso } from '../../history.js';
+import { today } from '../../paths.js';
 
 const URL = 'http://localhost:4705';
 
