@@ -6,7 +6,9 @@
   if (window.__coincellCapture) return;
   const store = window.__coincellCapture = [];
   const root = location.hostname.split('.').slice(-2).join('.');
-  const same = (u) => { try { const h = new URL(u, location.href).hostname; return h === root || h.endsWith(`.${root}`); } catch { return false; } };
+  // The site's own hosts, and other hosts too (some sites keep their data elsewhere), minus the usual analytics and chat services.
+  const NOISE = /datadog|qualtrics|pendo|demdex|omtrdc|adobe|cookielaw|onetrust|launchdarkly|split\.io|google|gstatic|doubleclick|facebook|walkme|fullstory|cognigy|glance|segment|mixpanel|amplitude|newrelic|nr-data|sentry|hotjar|optimizely|tealium|medallia|liveperson|applicationinsights|monitor\.azure|fonts\./i;
+  const same = (u) => { try { const x = new URL(u, location.href); return x.hostname === root || x.hostname.endsWith(`.${root}`) || !NOISE.test(x.hostname); } catch { return false; } };
   const keep = (method, url, status, text, sent) => {
     if (!same(url)) return;
     let body = null;

@@ -9,6 +9,7 @@ import kestrel from './sites/demo/kestrel.js';
 import fidelity from './sites/fidelity.js';
 import chase from './sites/chase.js';
 import ally from './sites/ally.js';
+import newrezServicing from './sites/newrez-servicing.js';
 
 export const TARGETS = { demo: 'http://localhost:4690', real: 'http://localhost:4680' };
 
@@ -17,6 +18,7 @@ export const SITES = [
   { id: 'chase', name: 'Chase', match: /^https:\/\/secure\.chase\.com\//, capture: chase, target: 'real' },
   { id: 'ally', name: 'Ally Bank', match: /^https:\/\/secure\.ally\.com\//, capture: ally, target: 'real' },
   { id: 'newrez', name: 'Newrez', match: /^https:\/\/myaccount\.newrez\.com\//, file: 'sites/newrez.js', target: 'real' },
+  { id: 'newrez', name: 'Newrez (account details)', match: /^https:\/\/servicing\.newrez\.com\//, capture: newrezServicing, target: 'real' },
   { id: 'harborline', name: 'Harborline Bank (demo)', match: /^http:\/\/localhost:4701\//, file: 'sites/demo/harborline.js', target: 'demo' },
   { id: 'kestrel', name: 'Kestrel Card (demo)', match: /^http:\/\/localhost:4702\//, capture: kestrel, target: 'demo' },
   { id: 'copperleaf', name: 'Copperleaf Card (demo)', match: /^http:\/\/localhost:4703\//, file: 'sites/demo/copperleaf.js', target: 'demo' },
