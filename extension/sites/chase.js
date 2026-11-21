@@ -29,7 +29,7 @@ export default {
     go: '/web/auth/dashboard#/dashboard/overview', reload: true, timeout: 60_000,
     waitFor: [/\/app\/data\/list/],
     // Runs in the page. Opens each account's page in turn and waits for its transactions to load,
-    // then repeats that same request once asking for more rows. Finishes back on the overview.
+    // then repeats that same request for earlier activity. Finishes back on the overview.
     act: async () => {
       const seen = () => window.__coincellCapture ?? [];
       const sleep = (ms) => new Promise((r) => setTimeout(r, ms));
@@ -47,12 +47,50 @@ export default {
         const since = Date.now();
         location.hash = `#/dashboard/summary/${t.accountId}/${t.accountTileType}/${t.accountTileDetailType}`;
         const own = await waitFor((e) => e.at >= since && e.status < 400 && feed.test(e.url) && new URL(e.url).searchParams.get('digital-account-identifier') === String(t.accountId));
-        if (own) {
-          const more = new URL(own.url);
-          for (const count of ['250', '100']) {   // the page asks for about a month; ask the same question for more
-            more.searchParams.set(card ? 'record-count' : 'requested-record-count', count);
-            const res = await fetch(more, { headers: fresh(own.sent?.headers), credentials: 'include' }).catch(() => null);
-            if (res?.ok) break;
+        if (own && !card) {
+          // Checking and savings: keep pressing "see more", in effect. Each answer carries a
+          // bookmark for the next page; ask again with it until the site says there is no more.
+          let last = own.body, pages = 0;
+          const ask = new URL(own.url);
+          ask.searchParams.set('requested-record-count', '100');
+          while (last?.moreRecordsIndicator && last.scrollKeyPageOffsetRecordIdentifier && pages++ < 25) {
+            ask.searchParams.set('scroll-key-page-offset-record-identifier', last.scrollKeyPageOffsetRecordIdentifier);
+            const res = await fetch(ask, { headers: fresh(own.sent?.headers), credentials: 'include' }).catch(() => null);
+            if (!res?.ok) { if (ask.searchParams.get('requested-record-count') === '32') break; ask.searchParams.set('requested-record-count', '32'); continue; }
+            last = await res.clone().json().catch(() => null);
+            await sleep(500);
+          }
+        }
+        if (own && card) {
+          // Cards: the page shows only the current statement. Ask the same question for earlier
+          // periods, 60 days at a time, back about two years or until three periods are empty.
+          const stamp = (d, dashes) => { const p = (n) => String(n).padStart(2, '0'); return [d.getFullYear(), p(d.getMonth() + 1), p(d.getDate())].join(dashes ? '-' : ''); };
+          const range = async (from, to, dashes, count) => {
+            const ask = new URL(own.url);
+            ask.searchParams.set('record-count', count);
+            ask.searchParams.set('account-activity-start-date', stamp(from, dashes));
+            ask.searchParams.set('account-activity-end-date', stamp(to, dashes));
+            ask.searchParams.set('request-type-code', 'T');
+            const res = await fetch(ask, { headers: fresh(own.sent?.headers), credentials: 'include' }).catch(() => null);
+            return res?.ok ? await res.clone().json().catch(() => null) : null;
+          };
+          const day = 86_400_000;
+          let dashes = false, count = '100', to = new Date(), empty = 0;
+          for (let i = 0; i < 12 && empty < 3; i++) {
+            const from = new Date(to.getTime() - 59 * day);
+            let got = await range(from, to, dashes, count);
+            if (!got && i === 0) {   // first try: find the date style and the row count the site accepts
+              for (const [d, c] of [[true, '100'], [false, '50'], [true, '50']]) { got = await range(from, to, d, c); if (got) { dashes = d; count = c; break; } }
+              if (!got) break;
+            }
+            if (got?.moreTransactionsIndicator) {   // too many for one answer: take the period in two halves
+              const mid = new Date(to.getTime() - 30 * day);
+              await range(mid, to, dashes, count); await sleep(400);
+              await range(from, new Date(mid.getTime() - day), dashes, count);
+            }
+            empty = got?.activities?.length ? 0 : empty + 1;
+            to = new Date(from.getTime() - day);
+            await sleep(500);
           }
         }
         await sleep(900);
