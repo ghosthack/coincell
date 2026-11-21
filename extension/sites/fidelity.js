@@ -110,7 +110,13 @@ export default {
           const res = await fetch(url, { method: 'POST', credentials: 'include', headers, body: JSON.stringify(body) }).catch(() => null);
           return res?.ok ? await res.clone().json().catch(() => null) : null;
         };
-        const history = async (range, a) => (await post('/ftgw/digital/portfolio/api/BalanceHistory', { ...json, ...token }, { range, acctList: [{ acctNum: a.acctNum, acctType: a.acctType }] }))?.balHistoryDetail?.balances?.length ?? 0;
+        const detail = [`token found: ${Boolean(token['x-xsrf-token'])}, managed-account headers found: ${Boolean(managedHeaders)}`];
+        const history = async (range, a) => {
+          const res = await fetch('/ftgw/digital/portfolio/api/BalanceHistory', { method: 'POST', credentials: 'include', headers: { ...json, ...token }, body: JSON.stringify({ range, acctList: [{ acctNum: a.acctNum, acctType: a.acctType }] }) }).catch(() => null);
+          const got = res?.ok ? await res.clone().json().catch(() => null) : null, n = got?.balHistoryDetail?.balances?.length ?? 0;
+          detail.push(`history ${range} for a ${a.acctType} / ${a.acctSubType} account: status ${res?.status ?? 'none'}, ${res?.headers.get('content-type') ?? 'no type'}, ${n} points${got && !n ? `, keys ${Object.keys(got).join('+')}` : ''}`);
+          return n;
+        };
         const valued = person.assets.filter((x) => x.acctNum && typeof x.gainLossBalanceDetail?.totalMarketVal === 'number');
 
         let range = null, misses = 0;
@@ -135,7 +141,7 @@ export default {
             await sleep(400);
           }
         }
-        return { accounts: valued.map((a) => ({ acctNum: a.acctNum, acctType: a.acctType, name: a.preferenceDetail?.name || a.acctSubTypeDesc || a.acctType })) };
+        return { detail, accounts: valued.map((a) => ({ acctNum: a.acctNum, acctType: a.acctType, name: a.preferenceDetail?.name || a.acctSubTypeDesc || a.acctType })) };
       } },
     { go: '/ftgw/digital/portfolio/positions', waitFor: [/\/portfolio\/api\/GetContext/], alsoWait: [/\/poswebex\/api\/positions$/], settle: 1500 },
     { go: '/ftgw/digital/portfolio/activity', waitFor: [/\/activityapi\/api\/v1\/transactions\/history/], settle: 1500,
@@ -170,7 +176,7 @@ export default {
         }
       } },
   ],
-  describe: [],
+  describe: [/\/portfolio\/api\/GetPositions$/],
   build(captured) {
     const context = captured.find((c) => /GetContext/.test(c.url) && c.body?.getContext?.person?.assets)?.body.getContext.person;
     if (!context) throw new Error('Fidelity did not send the account list');
@@ -245,6 +251,11 @@ export default {
     if (feed && !settled.size) { const found = []; findPositions(feed, null, found); take(found); }
     const out = [...accounts.values()];
     if (!out.length) throw new Error('Fidelity sent an account list, but none of the accounts carried a balance');
-    return { accounts: out, note: `${holdings} holdings, ${out.reduce((s, a) => s + a.transactions.length, 0)} transactions, past values for ${histories} accounts${skipped ? `, ${skipped} skipped for accounts without a balance` : ''}` };
+    // For the send record: one line per account saying what kind it is and what was found for it.
+    const kinds = new Map(context.assets.map((x) => [x.acctNum, x]));
+    const detail = out.map((a, i) => { const x = kinds.get(a.id) ?? {}; return `account ${i + 1}: ${x.acctType} / ${x.acctSubType}${x.managedAcctDetail ? ' / managed' : ''}${x.workplacePlanDetail?.planId ? ' / workplace plan' : ''}, balance ${a.balance ? 'non-zero' : 'zero'}, ${a.holdings?.length ?? 0} holdings, ${a.transactions.length} transactions, ${a.history?.length ?? 0} past values`; });
+    const summaryPositions = captured.filter((c) => /\/portfolio\/api\/GetPositions$/.test(c.url));
+    detail.push(`summary positions answers: ${summaryPositions.length}, accounts in them: ${summaryPositions.map((c) => (c.body?.position?.acctDetails?.acctDetail ?? []).length).join(',')}, of which known: ${summaryPositions.map((c) => (c.body?.position?.acctDetails?.acctDetail ?? []).filter((d) => accounts.has(d.acctNum)).length).join(',')}`);
+    return { accounts: out, detail, note: `${holdings} holdings, ${out.reduce((s, a) => s + a.transactions.length, 0)} transactions, past values for ${histories} accounts${skipped ? `, ${skipped} skipped for accounts without a balance` : ''}` };
   },
 };
