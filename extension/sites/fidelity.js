@@ -37,7 +37,7 @@ function findPositions(node, acct, out) {
     const pick = (re) => nums.find(([path]) => re.test(path.split('.').at(-1)))?.[1] ?? null;
     const value = pick(/^(marketval|mktval|marketvalue|mktvalue|currentvalue|currentval|totalmarketval)$/);
     if (value != null) {
-      out.push({ acct: here, symbol: node.symbol, value, name: [node.securityDescription, node.securityDesc, node.symbolDesc, node.description, node.desc, node.securityDetail?.desc].find((v) => typeof v === 'string' && v),
+      out.push({ acct: here, symbol: node.symbol, value, assetType: typeof node.securityType === 'string' ? node.securityType : undefined, name: [node.securityDescription, node.securityDesc, node.symbolDesc, node.description, node.desc, node.securityDetail?.desc].find((v) => typeof v === 'string' && v),
         quantity: pick(/^(quantity|qty|shares|sharequantity)$/), price: pick(/^(lastprice|price|currentprice|lastpx)$/), costBasis: pick(/^(costbasis|totalcostbasis|costbasistotal|totalcost)$/) });
       return;
     }
@@ -92,29 +92,51 @@ const isoDate = (n) => today(new Date(n < 1e11 ? n * 1000 : n));   // seconds or
 export default {
   loggedOut: /login|signin|logout|\/session\//i,
   steps: [
-    { go: '/ftgw/digital/portfolio/positions', waitFor: [/\/portfolio\/api\/GetContext/], alsoWait: [/\/poswebex\/api\/positions$/], settle: 1500,
-      // Each account's value over time, from the feed behind Fidelity's balance chart. Asked one
-      // account at a time, for the longest period the site accepts. Runs in the page.
+    { go: '/ftgw/digital/portfolio/summary', waitFor: [/\/portfolio\/api\/GetContext/], alsoWait: [/\/portfolio\/api\/GetPositions$/, /\/mas\/api\/accounts-list\/info/], settle: 1500,
+      // Each account's value over time. Fidelity keeps this in different places for different
+      // kinds of account, and most of them only answer a request carrying the security token its
+      // own pages send. So the token is taken from a request the summary page has just made, and
+      // the same questions the page asks are asked for every account. Runs in the page.
       act: async () => {
         const sleep = (ms) => new Promise((r) => setTimeout(r, ms));
-        const person = (window.__coincellCapture ?? []).find((e) => /GetContext/.test(e.url) && e.body?.getContext?.person?.assets)?.body.getContext.person;
+        const seen = () => window.__coincellCapture ?? [];
+        const person = seen().find((e) => /GetContext/.test(e.url) && e.body?.getContext?.person?.assets)?.body.getContext.person;
         if (!person) return;
-        const ask = async (range, a) => {
-          const res = await fetch('/ftgw/digital/portfolio/api/BalanceHistory', { method: 'POST', credentials: 'include', headers: { accept: 'application/json', 'content-type': 'application/json' },
-            body: JSON.stringify({ range, acctList: [{ acctNum: a.acctNum, acctType: a.acctType }] }) }).catch(() => null);
-          const got = res?.ok ? await res.clone().json().catch(() => null) : null;
-          return got?.balHistoryDetail?.balances?.length ?? 0;
+        const sentWith = (name, where = /./) => seen().find((e) => where.test(e.url) && e.sent?.headers?.[name])?.sent.headers;
+        const token = sentWith('x-xsrf-token') ? { 'x-xsrf-token': sentWith('x-xsrf-token')['x-xsrf-token'] } : {};
+        const managedHeaders = sentWith('fid-client-app-id', /\/mas\/api\//);
+        const json = { accept: 'application/json', 'content-type': 'application/json' };
+        const post = async (url, headers, body) => {
+          const res = await fetch(url, { method: 'POST', credentials: 'include', headers, body: JSON.stringify(body) }).catch(() => null);
+          return res?.ok ? await res.clone().json().catch(() => null) : null;
         };
+        const history = async (range, a) => (await post('/ftgw/digital/portfolio/api/BalanceHistory', { ...json, ...token }, { range, acctList: [{ acctNum: a.acctNum, acctType: a.acctType }] }))?.balHistoryDetail?.balances?.length ?? 0;
+        const valued = person.assets.filter((x) => x.acctNum && typeof x.gainLossBalanceDetail?.totalMarketVal === 'number');
+
         let range = null, misses = 0;
-        for (const a of person.assets.filter((x) => x.acctNum && typeof x.gainLossBalanceDetail?.totalMarketVal === 'number')) {
-          if (range) await ask(range, a);
+        for (const a of valued) {
+          if (range) await history(range, a);
           else {
-            for (const r of ['5Y', '3Y', '2Y', '1Y']) { if (await ask(r, a)) { range = r; break; } await sleep(300); }
-            if (!range && ++misses >= 3) return;   // the feed is not answering; do not keep asking
+            for (const r of ['5Y', '3Y', '2Y', '1Y']) { if (await history(r, a)) { range = r; break; } await sleep(300); }
+            if (!range && ++misses >= 4) break;   // the feed is not answering; do not keep asking
           }
           await sleep(350);
         }
+        // Managed accounts have a chart and a positions list of their own.
+        if (managedHeaders) {
+          const headers = { ...json, ...token, 'fid-originating-app-id': managedHeaders['fid-originating-app-id'], 'fid-client-app-id': managedHeaders['fid-client-app-id'] };
+          for (const a of valued.filter((x) => x.managedAcctDetail || /managed/i.test(`${x.acctSubType} ${x.acctSubTypeDesc}`))) {
+            const now = Date.now(), threeYears = 3 * 365 * 86_400_000;
+            for (const unit of [1, 1000]) {   // the dates are a count of milliseconds or of seconds; try both
+              const got = await post('/ftgw/digital/mas/api/balance-card/v1/balance-chart-data', headers, { acctNum: a.acctNum, startDate: Math.round((now - threeYears) / unit), endDate: Math.round(now / unit) });
+              if (got?.balances?.length) break;
+            }
+            await post('/ftgw/digital/mas/api/positions', headers, { ids: [a.acctNum] });
+            await sleep(400);
+          }
+        }
       } },
+    { go: '/ftgw/digital/portfolio/positions', waitFor: [/\/portfolio\/api\/GetContext/], alsoWait: [/\/poswebex\/api\/positions$/], settle: 1500 },
     { go: '/ftgw/digital/portfolio/activity', waitFor: [/\/activityapi\/api\/v1\/transactions\/history/], settle: 1500,
       // The Activity page only loads its default range (about 30 days). To go further back, repeat
       // the page's own request, unchanged except for the dates, in 90-day steps for up to two years.
@@ -168,31 +190,49 @@ export default {
     const pastDate = (s) => { const t = String(s ?? ''); const m = t.match(/^(\d{1,2})\/(\d{1,2})\/(\d{4})/); if (/^\d{4}-\d{2}-\d{2}/.test(t)) return t.slice(0, 10); if (m) return `${m[3]}-${m[1].padStart(2, '0')}-${m[2].padStart(2, '0')}`; const d = Date.parse(t); return Number.isNaN(d) ? null : today(new Date(d)); };
     let histories = 0;
     for (const c of captured) {
-      const rows = /\/api\/BalanceHistory$/.test(c.url) ? c.body?.balHistoryDetail?.balances : null;
+      const rows = /\/api\/BalanceHistory$/.test(c.url) ? c.body?.balHistoryDetail?.balances : /\/balance-chart-data$/.test(c.url) ? c.body?.balances : null;
       if (!rows?.length) continue;
       let asked; try { asked = JSON.parse(c.sent ?? '{}'); } catch { asked = {}; }
-      const a = asked.acctList?.length === 1 ? accounts.get(asked.acctList[0].acctNum) : null;
+      const a = asked.acctList?.length === 1 ? accounts.get(asked.acctList[0].acctNum) : asked.acctNum ? accounts.get(asked.acctNum) : null;
       if (!a || (a.history?.length ?? 0) >= rows.length) continue;
       if (!a.history) histories++;
       a.history = rows.map((r) => ({ date: pastDate(r.date), balance: r.value })).filter((r) => r.date && typeof r.balance === 'number');
     }
-    const feed = captured.filter((c) => /\/poswebex\/api\/positions$/.test(c.url)).at(-1)?.body;
-    const found = feed?.rowData ? fromRows(feed) : [];
-    if (feed && !found.length) findPositions(feed, null, found);
-    for (const p of found) {
-      const a = accounts.get(p.acct);
-      if (!a) continue;
-      const cash = p.rowType === 'POSITION_CORE' || /\*\*$/.test(p.symbol) || /^(CORE|CASH)\b|MONEY MARKET/i.test(p.name ?? '');
-      const symbol = cash ? 'CASH' : p.symbol;
-      a.holdings ??= new Map();
-      const h = a.holdings.get(symbol) ?? { symbol, name: cash ? 'Cash & money market' : p.name, quantity: 0, value: 0, price: cash ? 1 : p.price, costBasis: null, assetType: cash ? 'Cash' : p.assetType };
-      a.holdings.set(symbol, h);
-      h.value += p.value;
-      h.quantity += cash ? p.value : p.quantity ?? 0;
-      if (!cash && p.costBasis != null) h.costBasis = (h.costBasis ?? 0) + p.costBasis;
-    }
+    // Holdings, from three places in turn. An account keeps what the first place that knows it says.
+    //   1. the rows behind the Positions table (ordinary brokerage accounts)
+    //   2. a managed account's own positions list
+    //   3. the positions the summary page loads, which include workplace plans
     let holdings = 0;
-    for (const a of accounts.values()) if (a.holdings) { a.holdings = [...a.holdings.values()]; holdings += a.holdings.length; }
+    const settled = new Set();
+    const take = (list) => {
+      const fresh = new Map();
+      for (const p of list) {
+        const a = accounts.get(p.acct);
+        if (!a || settled.has(a) || typeof p.value !== 'number') continue;
+        const cash = p.rowType === 'POSITION_CORE' || p.assetType === 'Core' || /\*\*$/.test(p.symbol) || /^(CORE|CASH)\b|MONEY MARKET/i.test(p.name ?? '');
+        const symbol = cash ? 'CASH' : p.symbol, map = fresh.get(a) ?? fresh.set(a, new Map()).get(a);
+        const h = map.get(symbol) ?? { symbol, name: cash ? 'Cash & money market' : p.name, quantity: 0, value: 0, price: cash ? 1 : p.price ?? null, costBasis: null, assetType: cash ? 'Cash' : p.assetType };
+        map.set(symbol, h);
+        h.value += p.value;
+        h.quantity += cash ? p.value : p.quantity ?? 0;
+        if (!cash && p.costBasis != null) h.costBasis = (h.costBasis ?? 0) + p.costBasis;
+      }
+      for (const [a, map] of fresh) { a.holdings = [...map.values()]; settled.add(a); holdings += a.holdings.length; }
+    };
+    const feed = captured.filter((c) => /\/poswebex\/api\/positions$/.test(c.url)).at(-1)?.body;
+    take(feed?.rowData ? fromRows(feed) : []);
+    for (const c of captured) {
+      if (!/\/mas\/api\/positions$/.test(c.url) || !c.body?.topPositions) continue;
+      let asked; try { asked = JSON.parse(c.sent ?? '{}'); } catch { asked = {}; }
+      take(c.body.topPositions.map((p) => ({ acct: asked.ids?.[0], symbol: p.symbol || 'UNKNOWN', name: p.securityDescription, quantity: p.quantity, value: p.marketVal, price: p.quantity ? p.marketVal / p.quantity : null, assetType: p.securityType })));
+    }
+    for (const c of captured) {
+      if (!/\/portfolio\/api\/GetPositions$/.test(c.url)) continue;
+      const found = [];
+      findPositions(c.body, null, found);
+      take(found);
+    }
+    if (feed && !settled.size) { const found = []; findPositions(feed, null, found); take(found); }
     const out = [...accounts.values()];
     if (!out.length) throw new Error('Fidelity sent an account list, but none of the accounts carried a balance');
     return { accounts: out, note: `${holdings} holdings, ${out.reduce((s, a) => s + a.transactions.length, 0)} transactions, past values for ${histories} accounts${skipped ? `, ${skipped} skipped for accounts without a balance` : ''}` };
