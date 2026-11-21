@@ -55,13 +55,17 @@ const cellNumber = (x) => {
 };
 const cellText = (x, keys) => (typeof x === 'string' ? x : x && typeof x === 'object' ? keys.map((k) => x[k]).find((v) => typeof v === 'string' && v.trim()) : undefined);
 
-// Positions out of the table rows. A row counts when it has an account, a symbol and a current
-// value. Total rows can look like that too, so each account is checked against the total the
-// feed gives for it, and rows that are really totals are dropped.
+// Positions out of the table rows. Each row says what it is in `rowType`: ACCOUNT, POSITION,
+// POSITION_CORE (the cash position), ACCOUNT_TOTAL, GRAND_TOTAL, SPACER and a few messages.
+// Cells are { disp: "formatted text", val: number }; `sym` holds the ticker and description.
+// Should the row types ever change, the fallback is any row with an account, a symbol and a
+// value, checked against the feed's total for the account so total rows are not counted.
 function fromRows(feed) {
   const totals = new Map((feed.acctTot ?? []).map((t) => [t.acctNum, t.currentVal ?? t.recentMarketVal]));
   const byAccount = new Map();
+  const typed = feed.rowData.some((r) => /^POSITION/.test(r.rowType ?? ''));
   for (const r of feed.rowData) {
+    if (typed && !/^POSITION/.test(r.rowType ?? '')) continue;
     const acct = r.actNum ?? r.meta?.acctActns?.actNum, value = cellNumber(r.curVal);
     const symbol = cellText(r.sym, ['symbol', 'sym', 'ticker', 'name', 'displayValue', 'value'])?.trim();
     if (!acct || !symbol || value == null) continue;
@@ -144,7 +148,7 @@ export default {
     for (const p of found) {
       const a = accounts.get(p.acct);
       if (!a) continue;
-      const cash = /\*\*$/.test(p.symbol) || /^(CORE|CASH)\b|MONEY MARKET/i.test(p.name ?? '');
+      const cash = p.rowType === 'POSITION_CORE' || /\*\*$/.test(p.symbol) || /^(CORE|CASH)\b|MONEY MARKET/i.test(p.name ?? '');
       const symbol = cash ? 'CASH' : p.symbol;
       a.holdings ??= new Map();
       const h = a.holdings.get(symbol) ?? { symbol, name: cash ? 'Cash & money market' : p.name, quantity: 0, value: 0, price: cash ? 1 : p.price, costBasis: null };
