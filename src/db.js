@@ -153,7 +153,7 @@ export function allTransactions() {
     ORDER BY t.date, t.id`).all();
 }
 
-const TRADES = new Set(['Buy', 'Sell', 'Dividend', 'Interest']);
+const TRADES = new Set(['Buy', 'Sell', 'Dividend', 'Interest', 'Fee', 'Tax']); // activity inside an account, never one side of a transfer
 
 /**
  * Pair up the two sides of money moving between your own accounts: a card

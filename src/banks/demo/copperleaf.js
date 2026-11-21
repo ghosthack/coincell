@@ -2,26 +2,10 @@
 // Technique: read the summary off the page, then use the site's own CSV export for transactions.
 import fs from 'node:fs';
 import { parseMoney } from '../../browser.js';
+import { parseCsv } from '../../csv.js';
 import { balanceHistory, mdyToIso } from '../../history.js';
 
 const URL = 'http://localhost:4703';
-
-export function parseCsv(text) {
-  const rows = [];
-  let row = [], cell = '', quoted = false;
-  for (let i = 0; i < text.length; i++) {
-    const ch = text[i];
-    if (quoted) {
-      if (ch === '"' && text[i + 1] === '"') { cell += '"'; i++; } else if (ch === '"') quoted = false; else cell += ch;
-    } else if (ch === '"') quoted = true;
-    else if (ch === ',') { row.push(cell); cell = ''; }
-    else if (ch === '\n') { row.push(cell); rows.push(row); row = []; cell = ''; }
-    else if (ch !== '\r') cell += ch;
-  }
-  if (cell || row.length) { row.push(cell); rows.push(row); }
-  const [head, ...body] = rows;
-  return body.map((r) => Object.fromEntries(head.map((h, i) => [h, r[i]])));
-}
 
 export default {
   id: 'copperleaf', name: 'Copperleaf Card', needsBrowser: true,
