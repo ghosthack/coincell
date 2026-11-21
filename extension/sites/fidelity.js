@@ -1,9 +1,9 @@
 // Fidelity, by capture. Opens your Positions page and your Activity page in the tab and uses the
 // answers those pages receive: the account list with balances, and the activity list.
 // Written from a masked recording, so the field names are known but no real values were seen.
-// Holdings come from the positions feed. Its exact layout has not been seen yet, so they are
-// found by what a position looks like: something with a symbol and a market value, under an account.
-import { today } from '../shared.js';
+// Holdings come from the positions feed, which is the list of rows behind the Positions table:
+// account headings, positions and totals mixed together, with abbreviated field names.
+import { today, parseMoney } from '../shared.js';
 
 const ACTIONS = [
   [/^YOU BOUGHT|^REINVESTMENT|^PURCHASE|\bBOUGHT\b/i, 'Buy'],
@@ -43,6 +43,45 @@ function findPositions(node, acct, out) {
     }
   }
   for (const v of Object.values(node)) findPositions(v, here, out);
+}
+// A cell may be a plain number, a formatted string, or an object wrapping either.
+const cellNumber = (x) => {
+  if (x == null) return null;
+  if (typeof x === 'number') return x;
+  if (typeof x === 'string') return parseMoney(x);
+  if (typeof x !== 'object' || Array.isArray(x)) return null;
+  for (const k of ['value', 'val', 'raw', 'num', 'amount', 'amt', 'displayValue', 'display', 'formatted', 'text']) if (k in x) { const n = cellNumber(x[k]); if (n != null) return n; }
+  return Object.values(x).find((v) => typeof v === 'number') ?? null;
+};
+const cellText = (x, keys) => (typeof x === 'string' ? x : x && typeof x === 'object' ? keys.map((k) => x[k]).find((v) => typeof v === 'string' && v.trim()) : undefined);
+
+// Positions out of the table rows. A row counts when it has an account, a symbol and a current
+// value. Total rows can look like that too, so each account is checked against the total the
+// feed gives for it, and rows that are really totals are dropped.
+function fromRows(feed) {
+  const totals = new Map((feed.acctTot ?? []).map((t) => [t.acctNum, t.currentVal ?? t.recentMarketVal]));
+  const byAccount = new Map();
+  for (const r of feed.rowData) {
+    const acct = r.actNum ?? r.meta?.acctActns?.actNum, value = cellNumber(r.curVal);
+    const symbol = cellText(r.sym, ['symbol', 'sym', 'ticker', 'name', 'displayValue', 'value'])?.trim();
+    if (!acct || !symbol || value == null) continue;
+    const row = { acct, symbol, value, rowType: r.rowType, quantity: cellNumber(r.qty), price: cellNumber(r.lstPrc), costBasis: cellNumber(r.cstBasTot),
+      name: cellText(r.sym, ['desc', 'description', 'secDesc', 'longName', 'securityDescription', 'subName', 'title']) ?? cellText(r.desc, ['name', 'value', 'displayValue']) };
+    byAccount.set(acct, [...(byAccount.get(acct) ?? []), row]);
+  }
+  const out = [];
+  for (const [acct, rows] of byAccount) {
+    const total = totals.get(acct), sum = (list) => list.reduce((s, r) => s + r.value, 0);
+    const close = (a) => typeof total === 'number' && Math.abs(a - total) <= Math.max(1, Math.abs(total) * 0.005);
+    let keep = rows;
+    if (typeof total === 'number' && !close(sum(rows))) {
+      const withoutTotals = rows.filter((r) => !(Math.abs(r.value - total) < 0.011 && r.quantity == null) && !/total/i.test(r.symbol));
+      const types = [...new Set(rows.map((r) => r.rowType))].map((t) => rows.filter((r) => r.rowType === t));
+      keep = close(sum(withoutTotals)) ? withoutTotals : types.find((list) => close(sum(list))) ?? withoutTotals;
+    }
+    out.push(...keep);
+  }
+  return out;
 }
 const isoDate = (n) => today(new Date(n < 1e11 ? n * 1000 : n));   // seconds or milliseconds since 1970
 
@@ -99,8 +138,9 @@ export default {
         a.transactions.push({ date: isoDate(date), description, amount, category: ACTIONS.find(([re]) => re.test(description))?.[1] ?? 'Other' });
       }
     }
-    const found = [];
-    for (const c of captured) if (/\/poswebex\/api\/positions$/.test(c.url)) findPositions(c.body, null, found);
+    const feed = captured.filter((c) => /\/poswebex\/api\/positions$/.test(c.url)).at(-1)?.body;
+    const found = feed?.rowData ? fromRows(feed) : [];
+    if (feed && !found.length) findPositions(feed, null, found);
     for (const p of found) {
       const a = accounts.get(p.acct);
       if (!a) continue;

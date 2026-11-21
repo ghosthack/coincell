@@ -13,10 +13,28 @@ async function post(base, path, body) {
   return out;
 }
 
-const shapeOf = (v, depth = 0) => {
+// Field names and types with every value removed. For a list, the fields of ALL its items are
+// merged, since rows of different kinds carry different fields. The only values kept are short
+// labels in fields named "...Type", which say what kind of row something is.
+const shapeOf = (v, depth = 0, key = '') => {
   if (v === null) return 'null';
-  if (Array.isArray(v)) return v.length ? [shapeOf(v[0], depth + 1), `(${v.length} items)`] : [];
-  if (typeof v === 'object') return depth > 9 ? '{...}' : Object.fromEntries(Object.entries(v).map(([k, x]) => [k.replace(/[0-9]{4,}/g, '#'), shapeOf(x, depth + 1)]));
+  if (Array.isArray(v)) {
+    if (!v.length) return [];
+    if (v.every((x) => x && typeof x === 'object' && !Array.isArray(x))) {
+      const merged = {}, labels = {};
+      for (const item of v) for (const [k, x] of Object.entries(item)) {
+        const name = k.replace(/[0-9]{4,}/g, '#');
+        if (/type$/i.test(k) && typeof x === 'string' && /^[A-Za-z _-]{1,24}$/.test(x)) { (labels[name] ??= new Set()).add(x); continue; }
+        const s = shapeOf(x, depth + 1, k);
+        if (!(name in merged) || merged[name] === 'null') merged[name] = s;
+        else if (s && typeof s === 'object' && !Array.isArray(s) && typeof merged[name] === 'object') merged[name] = { ...s, ...merged[name] };
+      }
+      for (const [k, set] of Object.entries(labels)) merged[k] = `one of: ${[...set].slice(0, 12).join(' | ')}`;
+      return [merged, `(${v.length} items)`];
+    }
+    return [shapeOf(v[0], depth + 1), `(${v.length} items)`];
+  }
+  if (typeof v === 'object') return depth > 9 ? '{...}' : Object.fromEntries(Object.entries(v).map(([k, x]) => [k.replace(/[0-9]{4,}/g, '#'), shapeOf(x, depth + 1, k)]));
   if (typeof v === 'string') return /^-?[\d,.]+$/.test(v) ? 'numeric-string' : 'string';
   return typeof v;
 };
