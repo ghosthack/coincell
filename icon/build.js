@@ -26,14 +26,14 @@ const OUTPUTS = [[1024, 'coincell.png'], [256, '../public/icon.png'], [64, '../p
   await page.goto('http://icon.local/');
   await page.waitForFunction(() => window.RENDERED, null, { timeout: 120000 });
 
-  // Crop a square centred on the rendered part with an even margin, then scale down in halves for clean edges.
+  // Crop a square centred on the rendered part (ignoring the shadow's faintest fringe) with an even margin, then scale down in halves for clean edges.
   const images = await page.evaluate(({ margin, sizes }) => {
     const src = document.querySelector('canvas');
     const flat = document.createElement('canvas'); flat.width = src.width; flat.height = src.height;
     const g = flat.getContext('2d', { willReadFrequently: true }); g.drawImage(src, 0, 0);
     const { data, width, height } = g.getImageData(0, 0, flat.width, flat.height);
     let l = width, t = height, r = 0, b = 0;
-    for (let y = 0; y < height; y++) for (let x = 0; x < width; x++) if (data[(y * width + x) * 4 + 3] > 8) { if (x < l) l = x; if (x > r) r = x; if (y < t) t = y; if (y > b) b = y; }
+    for (let y = 0; y < height; y++) for (let x = 0; x < width; x++) if (data[(y * width + x) * 4 + 3] > 20) { if (x < l) l = x; if (x > r) r = x; if (y < t) t = y; if (y > b) b = y; }
     const side = Math.max(r - l, b - t) / (1 - 2 * margin), cx = (l + r) / 2, cy = (t + b) / 2;
     return sizes.map((size) => {
       let cur = document.createElement('canvas'); cur.width = cur.height = Math.round(side);

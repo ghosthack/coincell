@@ -1,4 +1,4 @@
-<img src="icon/coincell.png" width="128" align="right" alt="A 3D lithium coin cell engraved with a plus sign and the word coincell">
+<img src="icon/coincell.png" width="128" align="right" alt="A polished 3D lithium coin cell with a plus sign and the word coincell stamped into its face">
 
 # coincell
 
@@ -61,4 +61,4 @@ Browser automation may be against an institution's terms of use, and some block 
 
 ## Icon
 
-The icon is a 3D coin cell modelled in three.js. Edit `icon/scene.js`, then `cd icon && npm ci && node build.js`.
+The icon is a 3D coin cell modelled in three.js and lit like a product photo. Edit `icon/scene.js`, then `cd icon && npm ci && node build.js`.
