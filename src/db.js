@@ -16,7 +16,7 @@ db.exec(`
   );
   CREATE TABLE IF NOT EXISTS holdings (
     account_id TEXT NOT NULL, date TEXT NOT NULL, symbol TEXT NOT NULL, name TEXT,
-    quantity REAL, price REAL, value REAL NOT NULL, cost_basis REAL,
+    quantity REAL, price REAL, value REAL NOT NULL, cost_basis REAL, asset_type TEXT,
     PRIMARY KEY (account_id, date, symbol)
   );
   CREATE TABLE IF NOT EXISTS transactions (
@@ -28,6 +28,7 @@ db.exec(`
 `);
 
 try { db.exec('ALTER TABLE transactions ADD COLUMN principal REAL'); } catch { /* already there */ }
+try { db.exec('ALTER TABLE holdings ADD COLUMN asset_type TEXT'); } catch { /* already there */ }
 
 const num = (v) => (v == null || Number.isNaN(Number(v)) ? null : Number(v));
 
@@ -37,7 +38,8 @@ const num = (v) => (v == null || Number.isNaN(Number(v)) ? null : Number(v));
  *     type: 'cash' | 'investment' | 'retirement' | 'property' | 'credit' | 'loan',
  *     dueAmount?, dueDate?,                  // cards and loans: what is owed by when
  *     creditLimit?, rate?,                   // card limit; loan interest rate as a fraction (0.0625)
- *     holdings?: [{ symbol, name?, quantity?, price?, value, costBasis? }],
+ *     holdings?: [{ symbol, name?, quantity?, price?, value, costBasis?,
+ *                  assetType? }],            // the kind of security as the institution names it
  *     transactions?: [{ id?, date, description, amount, category?,
  *                      principal? }],        // loan payments: the part that reduces the debt
  *     history?: [{ date, balance }] }] }     // past balances, used only to fill gaps
@@ -55,7 +57,7 @@ export function saveSnapshot(bankId, snap) {
     ON CONFLICT(account_id, date) DO UPDATE SET balance = excluded.balance`);
   const delHoldings = db.prepare('DELETE FROM holdings WHERE account_id = ? AND date = ?');
   const insHolding = db.prepare(`INSERT OR REPLACE INTO holdings
-    (account_id, date, symbol, name, quantity, price, value, cost_basis) VALUES (?, ?, ?, ?, ?, ?, ?, ?)`);
+    (account_id, date, symbol, name, quantity, price, value, cost_basis, asset_type) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?)`);
   const upTxn = db.prepare(`INSERT INTO transactions (id, account_id, date, description, amount, category, principal)
     VALUES (?, ?, ?, ?, ?, ?, ?) ON CONFLICT(id) DO UPDATE SET date = excluded.date, description = excluded.description,
     amount = excluded.amount, category = excluded.category, principal = excluded.principal`);
@@ -71,7 +73,7 @@ export function saveSnapshot(bankId, snap) {
       if (a.holdings) {
         delHoldings.run(id, date);
         for (const h of a.holdings) {
-          insHolding.run(id, date, String(h.symbol), h.name ?? null, num(h.quantity), num(h.price), num(h.value) ?? 0, num(h.costBasis));
+          insHolding.run(id, date, String(h.symbol), h.name ?? null, num(h.quantity), num(h.price), num(h.value) ?? 0, num(h.costBasis), h.assetType ?? null);
         }
       }
       const seen = new Map();

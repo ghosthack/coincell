@@ -63,7 +63,7 @@ A suggestions panel and charts (saved vs market, a money flow diagram, a spendin
 mortgage payoff curves, and a projection of when investments could cover spending), plus tables for:
 savings rate, net worth change split into saved vs market, spending by category and payee, recurring bills,
 cash runway, asset allocation, transactions worth a second look, and debt payoff. The rules behind them are in
-`insights-config.json`: spending categories (first matching pattern wins), asset class per symbol, allocation
+`insights-config.json` (the demo has its own copy in `fakebanks/`): spending categories (first matching pattern wins), asset class per symbol, allocation
 targets, the low-balance warning level, and the extra mortgage payment scenarios. Edit and reload; nothing is stored.
 `manual-assets.json` holds values no website reports, such as your home. Copy `manual-assets.example.json` to
 create it; it is git-ignored because it is about you.

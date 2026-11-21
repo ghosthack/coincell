@@ -3,7 +3,7 @@
 // allocation targets, low-balance warning level, extra-payment scenarios).
 import fs from 'node:fs';
 import path from 'node:path';
-import { ROOT, today } from './paths.js';
+import { ROOT, DEMO, today } from './paths.js';
 import { getAccounts, getHoldings, getNetWorth, allTransactions } from './db.js';
 
 const DAY = 86_400_000;
@@ -19,9 +19,9 @@ const median = (a) => { const s = [...a].sort((x, y) => x - y); return s.length 
 const liquid = (type) => type === 'cash' || type === 'credit';
 
 function loadConfig() {
-  const file = path.join(ROOT, 'insights-config.json');
+  const file = DEMO ? path.join(ROOT, 'fakebanks', 'insights-config.json') : path.join(ROOT, 'insights-config.json');   // the demo has its own rules
   const cfg = fs.existsSync(file) ? JSON.parse(fs.readFileSync(file, 'utf8')) : {};
-  return { lowBalance: 1000, emergencyMonths: 6, extraPayments: [100, 250, 500], returns: { low: 0.03, mid: 0.05, high: 0.07 }, allocationTargets: {}, assetClasses: {}, categories: [], ...cfg };
+  return { lowBalance: 1000, emergencyMonths: 6, extraPayments: [100, 250, 500], returns: { low: 0.03, mid: 0.05, high: 0.07 }, allocationTargets: {}, assetClasses: {}, assetTypes: {}, categories: [], ...cfg };
 }
 
 /** "GREENLEAF GROCERY #114" -> "GREENLEAF GROCERY"; "AMAZON MKTP US, SEATTLE WA" -> "AMAZON MKTP US" */
@@ -89,7 +89,7 @@ function spending(txns, cfg) {
     if (!c.spending) continue;
     items.push(c.loanCost
       ? { date: t.date, amount: c.spending, category: 'Housing', merchant: 'MORTGAGE INTEREST & ESCROW' }
-      : { date: t.date, amount: c.spending, category: rules.find((r) => r.re.test(t.description))?.category ?? 'Other', merchant: merchant(t.description) });
+      : { date: t.date, amount: c.spending, category: rules.find((r) => r.re.test(t.description))?.category ?? t.category ?? 'Other', merchant: merchant(t.description) });
   }
   const now = today(), d30 = addDays(now, -30), d60 = addDays(now, -60), d90 = addDays(now, -90);
   const cats = new Map();
@@ -181,7 +181,10 @@ function allocation(holdings, cfg) {
   for (const h of holdings) {
     total += h.value;
     const rule = cfg.assetClasses[h.symbol];
-    const mix = rule?.mix ?? { [rule?.class ?? 'Unclassified']: 1 };
+    // A symbol's own rule wins; otherwise the kind of security the institution reported ("Equity",
+    // "Mutual Fund"), renamed through assetTypes if you have set that; otherwise Unclassified.
+    const fallback = h.symbol === 'CASH' ? 'Cash' : h.asset_type ? cfg.assetTypes[h.asset_type] ?? h.asset_type : 'Unclassified';
+    const mix = rule?.mix ?? { [rule?.class ?? fallback]: 1 };
     for (const [name, share] of Object.entries(mix)) classes.set(name, (classes.get(name) ?? 0) + h.value * share);
     const s = symbols.get(h.symbol) ?? { symbol: h.symbol, name: h.name, value: 0, accounts: 0, single: Boolean(rule?.single) };
     symbols.set(h.symbol, s);
@@ -209,9 +212,12 @@ function anomalies(txns, accounts) {
         out.push({ date: t.date, kind: 'Unusually large', account: t.account_name, description: t.description, amount: t.amount, note: `Usually about ${mid.toFixed(2)} at ${name} (${list.length} charges on record)` });
       }
     }
+    // Two identical charges on one day are suspicious once, but not from a payee where that happens
+    // routinely (a commuter fare, a daily coffee).
+    const twins = list.filter((b, i) => i > 0 && list[i - 1].account_id === b.account_id && list[i - 1].amount === b.amount && dayNum(b.date) - dayNum(list[i - 1].date) <= 1).length;
     for (let i = 1; i < list.length; i++) {
       const a = list[i - 1], b = list[i];
-      if (b.date > recent && a.account_id === b.account_id && a.amount === b.amount && -b.amount >= 10 && dayNum(b.date) - dayNum(a.date) <= 1) {
+      if (twins <= 2 && b.date > recent && a.account_id === b.account_id && a.amount === b.amount && -b.amount >= 10 && dayNum(b.date) - dayNum(a.date) <= 1) {
         out.push({ date: b.date, kind: 'Possible duplicate', account: b.account_name, description: b.description, amount: b.amount, note: `Same amount charged twice${a.date === b.date ? ' on the same day' : ' on consecutive days'}` });
       }
     }
@@ -264,7 +270,7 @@ function spendItems(txns, cfg) {
     const c = classify(t);
     if (!c.spending) continue;
     items.push({ date: t.date, amount: c.spending, merchant: c.loanCost ? 'MORTGAGE INTEREST & ESCROW' : merchant(t.description),
-      category: c.loanCost ? 'Housing' : rules.find((r) => r.re.test(t.description))?.category ?? 'Other' });
+      category: c.loanCost ? 'Housing' : rules.find((r) => r.re.test(t.description))?.category ?? t.category ?? 'Other' });   // your rules, then the bank's own category
   }
   return items;
 }
@@ -331,7 +337,9 @@ function advice(d, accounts, cfg) {
   const $ = (n) => '$' + Math.round(n).toLocaleString('en-US');
   const out = [];
   const say = (tone, title, text) => out.push({ tone, title, text });
-  for (const a of d.anomalies.filter((x) => x.kind === 'Possible duplicate')) say('action', 'Dispute a possible duplicate charge', `${a.description} charged ${$(-a.amount)} twice on ${a.account}. If only one was intended, ask the card issuer to reverse the other.`);
+  const dupes = d.anomalies.filter((x) => x.kind === 'Possible duplicate');
+  if (dupes.length === 1) say('action', 'Dispute a possible duplicate charge', `${dupes[0].description} charged ${$(-dupes[0].amount)} twice on ${dupes[0].account}. If only one was intended, ask the card issuer to reverse the other.`);
+  else if (dupes.length) say('action', 'Check possible duplicate charges', `${dupes.length} charges look doubled (${$(dupes.reduce((s, a) => s - a.amount, 0))} in total), the largest being ${dupes.sort((a, b) => a.amount - b.amount)[0].description}. They are listed under "Worth a second look".`);
   for (const a of d.anomalies.filter((x) => x.kind === 'Payment not received')) say('action', 'Chase a payment that has not arrived', `${a.description} (${$(-a.amount)}) left ${a.account} on ${a.date} with no matching credit on the other side.`);
   if (d.runway?.warn) say('action', 'Top up before a low point', `${d.runway.account} is projected to reach ${$(d.runway.low.balance)} on ${d.runway.low.date}, below your ${$(d.runway.threshold)} line. Moving ${$(d.runway.threshold - d.runway.low.balance)} in beforehand covers it.`);
   const cash = accounts.filter((a) => a.type === 'cash').reduce((s, a) => s + a.balance, 0);

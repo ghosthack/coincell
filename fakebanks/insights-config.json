@@ -1,0 +1,28 @@
+{
+  "lowBalance": 1000,
+  "emergencyMonths": 6,
+  "returns": { "low": 0.03, "mid": 0.05, "high": 0.07 },
+  "extraPayments": [100, 250, 500],
+  "allocationTargets": { "US stocks": 55, "International stocks": 25, "Bonds": 15, "Cash": 5 },
+  "assetClasses": {
+    "VTI": { "class": "US stocks" },
+    "VXUS": { "class": "International stocks" },
+    "BND": { "class": "Bonds" },
+    "AAPL": { "class": "US stocks", "single": true },
+    "CASH": { "class": "Cash" },
+    "MTR55": { "mix": { "US stocks": 0.54, "International stocks": 0.36, "Bonds": 0.10 } }
+  },
+  "categories": [
+    { "category": "Fees & interest", "match": "\\bFEE\\b|INTEREST CHARGE|OVERDRAFT|LATE CHARGE" },
+    { "category": "Housing", "match": "RENT|APARTMENTS|MORTGAGE|MTG" },
+    { "category": "Utilities", "match": "POWER|WATER|ELECTRIC|GAS CO|INTERNET|WIRELESS" },
+    { "category": "Subscriptions", "match": "STREAMFLIX|CLOUDBOX|NEWSWIRE|PUZZLE CLUB|NETFLIX|SPOTIFY|HULU" },
+    { "category": "Groceries", "match": "GROCERY|SUPERMARKET|MARKET\\b" },
+    { "category": "Eating out", "match": "COFFEE|BAKERY|TACO|NOODLE|RESTAURANT|CAFE|PIZZA|GRILL" },
+    { "category": "Transport", "match": "TRANSIT|SHELL|\\bOIL\\b|FUEL|RIDESHARE|PARKING|UBER|LYFT" },
+    { "category": "Travel", "match": "AIRWAYS|AIRLINES|HOTEL|AIRBNB" },
+    { "category": "Health & fitness", "match": "PHARMACY|GYM|FITNESS|MEDICAL|DENTAL" },
+    { "category": "Shopping", "match": "AMAZON|BOOKS|HARDWARE|OUTDOOR|SUPPLY" },
+    { "category": "Cash withdrawals", "match": "\\bATM\\b" }
+  ]
+}

@@ -14,6 +14,9 @@ const TILES = /\/dashboard\/tiles\/list/, CARD_DETAIL = /\/account\/detail\/card
 const DDA_TXNS = /\/etu-dda-transactions\/v4\/transactions/, CARD_TXNS = /\/etu-transactions\/v4\/accounts\/transactions/;
 const INVESTMENT_LIST = /\/portfolio\/account\/options\/list2/, POSITIONS = /\/digital-investment-positions\/v4\/positions/;
 const INVESTMENT_ACTIVITY = /\/digital-investment-transactions\/v2\/accounts-activities/;
+// Chase labels each card and checking transaction with a category code of its own.
+const CATEGORIES = { TRAV: 'Travel', FOOD: 'Food & drink', GROC: 'Groceries', SHOP: 'Shopping', BILL: 'Bills & utilities', HOME: 'Home', PROF: 'Professional services', GASS: 'Gas', ENTE: 'Entertainment',
+  HEAL: 'Health & wellness', AUTO: 'Automotive', PERS: 'Personal', EDUC: 'Education', GIFT: 'Gifts & donations', FEES: 'Fees & interest', MISC: 'Miscellaneous' };
 const ACTIVITY_KINDS = { Reinvest: 'Buy', Buy: 'Buy', Sell: 'Sell', Dividend: 'Dividend', Interest: 'Interest', Fee: 'Fee', Deposit: 'Deposit', Withdrawal: 'Withdrawal' };
 const ymd = (s) => (/^\d{8}$/.test(String(s ?? '')) ? `${s.slice(0, 4)}-${s.slice(4, 6)}-${s.slice(6, 8)}` : /^\d{4}-\d{2}-\d{2}/.test(String(s ?? '')) ? String(s).slice(0, 10) : null);
 const cents = (n) => Math.round(n * 100) / 100;
@@ -152,13 +155,13 @@ export default {
       if (DDA_TXNS.test(c.url)) for (const t of c.body?.transactions ?? []) {
         const date = ymd(t.transactionPostDate) ?? ymd(t.transactionDate), id = t.transactionIdentifier ?? t.etuTransactionIdentifier;
         if (t.pendingTransactionIndicator || !date || !id || typeof t.transactionAmount !== 'number') continue;   // pending lines change before they post
-        a.txns.set(id, { id, date, description: String(t.transactionDescription ?? '').replace(/\s+/g, ' ').trim(), amount: signed(t.transactionAmount, t.creditDebitCode) });
+        a.txns.set(id, { id, date, description: String(t.transactionDescription ?? '').replace(/\s+/g, ' ').trim(), amount: signed(t.transactionAmount, t.creditDebitCode), category: CATEGORIES[t.etuStdExpenseCategoryCode] });
       }
       if (CARD_TXNS.test(c.url)) for (const t of c.body?.activities ?? []) {
         const date = ymd(t.transactionPostDate) ?? ymd(t.transactionDate), id = t.derivedUniqueTransactionIdentifier ?? t.sorTransactionIdentifier ?? t.transactionReferenceNumber;
         if (t.transactionStatusCode !== 'Posted' || !date || !id || typeof t.transactionAmount !== 'number') continue;
         const m = t.merchantDetails ?? {};
-        a.txns.set(id, { id, date, amount: signed(t.transactionAmount, t.creditDebitCode),
+        a.txns.set(id, { id, date, amount: signed(t.transactionAmount, t.creditDebitCode), category: CATEGORIES[t.etuStandardExpenseCategoryCode],
           description: String(m.rawMerchantDetails?.merchantDbaName ?? m.enrichedMerchants?.[0]?.merchantName ?? t.etuStandardTransactionTypeName ?? 'Card transaction').replace(/\s+/g, ' ').trim() });
       }
     }
@@ -175,10 +178,11 @@ export default {
         const value = p.marketValue?.baseValueAmount;
         if (typeof value !== 'number') continue;
         list.push({ symbol: p.securityIdDetail?.symbolSecurityIdentifier || p.instrumentShortName || 'UNKNOWN', name: p.instrumentLongName ?? p.instrumentShortName, quantity: p.tradedUnitQuantity ?? null,
-          price: p.marketPrice?.baseValueAmount ?? null, value, costBasis: p.tradedCost?.baseValueAmount ?? null });
+          price: p.marketPrice?.baseValueAmount ?? null, value, costBasis: p.tradedCost?.baseValueAmount ?? null,
+          assetType: p.assetsClasses?.[0]?.basicAssetClassTypeName ?? p.assetCategoryName ?? p.accountSecurityTypeGroup?.holdingTypeName });
       }
       const cash = (c.body.cashSweepPositionSummary?.positions ?? []).reduce((s, p) => s + (p.marketValue?.baseValueAmount ?? 0), 0);
-      if (cash) list.push({ symbol: 'CASH', name: 'Cash & sweep', quantity: cash, price: 1, value: cash, costBasis: null });
+      if (cash) list.push({ symbol: 'CASH', name: 'Cash & sweep', quantity: cash, price: 1, value: cash, costBasis: null, assetType: 'Cash' });
       holdings += list.length;
       accounts.set(String(info.accountId), { id: String(info.accountId), name: info.nickname || 'Chase investment account', mask: info.mask, type: info.retirement ? 'retirement' : 'investment',
         balance: cents(list.reduce((s, h) => s + h.value, 0)), holdings: list, txns: new Map() });

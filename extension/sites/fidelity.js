@@ -69,7 +69,7 @@ function fromRows(feed) {
     const acct = r.actNum ?? r.meta?.acctActns?.actNum, value = cellNumber(r.curVal);
     const symbol = cellText(r.sym, ['symbol', 'sym', 'ticker', 'name', 'displayValue', 'value'])?.trim();
     if (!acct || !symbol || value == null) continue;
-    const row = { acct, symbol, value, rowType: r.rowType, quantity: cellNumber(r.qty), price: cellNumber(r.lstPrc), costBasis: cellNumber(r.cstBasTot),
+    const row = { acct, symbol, value, rowType: r.rowType, assetType: [r.meta?.securityType, r.meta?.holdingType].find((v) => typeof v === 'string' && v.trim()), quantity: cellNumber(r.qty), price: cellNumber(r.lstPrc), costBasis: cellNumber(r.cstBasTot),
       name: cellText(r.sym, ['desc', 'description', 'secDesc', 'longName', 'securityDescription', 'subName', 'title']) ?? cellText(r.desc, ['name', 'value', 'displayValue']) };
     byAccount.set(acct, [...(byAccount.get(acct) ?? []), row]);
   }
@@ -151,7 +151,7 @@ export default {
       const cash = p.rowType === 'POSITION_CORE' || /\*\*$/.test(p.symbol) || /^(CORE|CASH)\b|MONEY MARKET/i.test(p.name ?? '');
       const symbol = cash ? 'CASH' : p.symbol;
       a.holdings ??= new Map();
-      const h = a.holdings.get(symbol) ?? { symbol, name: cash ? 'Cash & money market' : p.name, quantity: 0, value: 0, price: cash ? 1 : p.price, costBasis: null };
+      const h = a.holdings.get(symbol) ?? { symbol, name: cash ? 'Cash & money market' : p.name, quantity: 0, value: 0, price: cash ? 1 : p.price, costBasis: null, assetType: cash ? 'Cash' : p.assetType };
       a.holdings.set(symbol, h);
       h.value += p.value;
       h.quantity += cash ? p.value : p.quantity ?? 0;
