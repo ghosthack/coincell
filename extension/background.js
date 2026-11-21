@@ -46,7 +46,7 @@ async function readByCapture(tab, site) {
       }
       if (step.act) await inPage(tab.id, step.act);
       await sleep(step.settle ?? 600);
-      captured.push(...await inPage(tab.id, () => window.__coincellCapture ?? []));
+      captured.push(...await inPage(tab.id, () => (window.__coincellCapture ?? []).map(({ method, url, status, body }) => ({ method, url, status, body }))));
     }
     return plan.build(captured);
   } finally {

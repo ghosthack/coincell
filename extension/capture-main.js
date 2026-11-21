@@ -1,28 +1,39 @@
 // Capture. For sites whose data feeds need tokens only the site's own pages have, coincell does
-// not ask the site anything itself. It opens the site's normal pages in your tab and keeps a copy
-// of the answers the pages receive anyway. The copies live in the page's memory until collected.
+// not compose requests itself. It opens the site's normal pages in your tab and keeps a copy of
+// what the pages ask and the answers they receive. The copies stay in the page's memory until
+// collected; a site script may repeat one of the page's own requests with a different date range.
 (() => {
   if (window.__coincellCapture) return;
   const store = window.__coincellCapture = [];
   const root = location.hostname.split('.').slice(-2).join('.');
   const same = (u) => { try { const h = new URL(u, location.href).hostname; return h === root || h.endsWith(`.${root}`); } catch { return false; } };
-  const keep = (method, url, status, text) => {
+  const keep = (method, url, status, text, sent) => {
     if (!same(url)) return;
-    try { store.push({ method, url: new URL(url, location.href).href, status, body: JSON.parse(text) }); if (store.length > 400) store.shift(); } catch { /* not JSON */ }
+    try { store.push({ method, url: new URL(url, location.href).href, status, body: JSON.parse(text), sent }); if (store.length > 400) store.shift(); } catch { /* not JSON */ }
   };
   const realFetch = window.fetch;
   window.fetch = async function (input, init) {
+    let url = '', method = 'GET', sent;
+    try {
+      const req = input instanceof Request ? input : null;
+      url = req ? req.url : String(input);
+      method = (init?.method ?? req?.method ?? 'GET').toUpperCase();
+      const headers = { ...(req ? Object.fromEntries(req.headers) : {}), ...(init?.headers ? Object.fromEntries(new Headers(init.headers)) : {}) };
+      const body = typeof init?.body === 'string' ? init.body : req && method !== 'GET' && init?.body == null ? await req.clone().text() : undefined;
+      sent = { headers, body };
+    } catch { /* never disturb the page */ }
     const res = await realFetch.apply(this, arguments);
     try {
-      const url = res.url || (input instanceof Request ? input.url : String(input));
-      const method = (init?.method ?? (input instanceof Request ? input.method : 'GET')).toUpperCase();
-      if ((res.headers.get('content-type') ?? '').includes('json')) res.clone().text().then((t) => keep(method, url, res.status, t), () => {});
+      if ((res.headers.get('content-type') ?? '').includes('json')) res.clone().text().then((t) => keep(method, res.url || url, res.status, t, sent), () => {});
     } catch { /* never disturb the page */ }
     return res;
   };
-  const open = XMLHttpRequest.prototype.open;
-  XMLHttpRequest.prototype.open = function (method, url) {
-    this.addEventListener('load', () => { try { if (typeof this.responseText === 'string') keep(String(method).toUpperCase(), url, this.status, this.responseText); } catch { /* ignore */ } });
-    return open.apply(this, arguments);
+  const open = XMLHttpRequest.prototype.open, send = XMLHttpRequest.prototype.send, setHeader = XMLHttpRequest.prototype.setRequestHeader;
+  XMLHttpRequest.prototype.open = function (method, url) { this.__cc = { method: String(method).toUpperCase(), url, headers: {} }; return open.apply(this, arguments); };
+  XMLHttpRequest.prototype.setRequestHeader = function (name, value) { try { if (this.__cc) this.__cc.headers[String(name).toLowerCase()] = String(value); } catch { /* ignore */ } return setHeader.apply(this, arguments); };
+  XMLHttpRequest.prototype.send = function (body) {
+    const info = this.__cc;
+    if (info) this.addEventListener('load', () => { try { if (this.responseType === '' || this.responseType === 'text') keep(info.method, info.url, this.status, this.responseText, { headers: info.headers, body: typeof body === 'string' ? body : undefined }); } catch { /* ignore */ } });
+    return send.apply(this, arguments);
   };
 })();

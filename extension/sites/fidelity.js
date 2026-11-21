@@ -22,7 +22,28 @@ export default {
   loggedOut: /login|signin|logout|\/session\//i,
   steps: [
     { go: '/ftgw/digital/portfolio/positions', waitFor: [/\/portfolio\/api\/GetContext/] },
-    { go: '/ftgw/digital/portfolio/activity', waitFor: [/\/activityapi\/api\/v1\/transactions\/history/], settle: 2500 },
+    { go: '/ftgw/digital/portfolio/activity', waitFor: [/\/activityapi\/api\/v1\/transactions\/history/], settle: 1500,
+      // The Activity page only loads its default range (about 30 days). To go further back, repeat
+      // the page's own request, unchanged except for the dates, in 90-day steps for up to two years.
+      // Runs in the page; the repeated requests are captured like any other.
+      act: async () => {
+        const first = (window.__coincellCapture ?? []).find((e) => /transactions\/history/.test(e.url) && e.status < 400 && e.sent?.body);
+        if (!first) return;
+        const asked = JSON.parse(first.sent.body), dates = asked?.filter?.searchCriteriaDetail;
+        if (typeof dates?.txnFromDate !== 'number' || typeof dates?.txnToDate !== 'number') return;
+        const day = 86400 * (dates.txnToDate > 1e11 ? 1000 : 1);   // the site counts in seconds or in milliseconds
+        let to = dates.txnFromDate, empty = 0;
+        for (let i = 0; i < 8 && empty < 2; i++) {
+          const from = to - 90 * day, body = structuredClone(asked);
+          Object.assign(body.filter.searchCriteriaDetail, { txnFromDate: from, txnToDate: to });
+          const res = await fetch(first.url, { method: 'POST', headers: first.sent.headers, body: JSON.stringify(body), credentials: 'include' });
+          if (!res.ok) break;
+          const got = await res.clone().json().catch(() => null);
+          empty = got?.data?.transactions?.length ? 0 : empty + 1;
+          to = from;
+          await new Promise((r) => setTimeout(r, 900));
+        }
+      } },
   ],
   build(captured) {
     const context = captured.find((c) => /GetContext/.test(c.url) && c.body?.getContext?.person?.assets)?.body.getContext.person;
