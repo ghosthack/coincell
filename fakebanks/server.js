@@ -47,6 +47,18 @@ function createSite({ port, name, color, handler }) {
       </style></head><body><header><b>${esc(name)}</b>${session ? '<a href="/logout">Sign out</a>' : ''}</header>
       <div class="demo">Demo site with made-up data. Nothing here is real.</div><main>${body}</main></body></html>`),
     };
+    // What a site can tell about the browser visiting it: open /_browser on any of the fake sites.
+    // The top half is what the server receives; the bottom half is what a script in the page can read.
+    if (url.pathname === '/_browser') {
+      const sent = ['user-agent', 'sec-ch-ua', 'sec-ch-ua-platform', 'accept-language'].map((h) => `<tr><td>${h}</td><td id="h-${h}">${esc(req.headers[h] ?? '(not sent)')}</td></tr>`).join('');
+      return ctx.html(`<div class="box"><h2>What this site can see about your browser</h2><h3>Sent with the request</h3><table>${sent}</table>
+        <h3>Readable by the page</h3><table id="seen"></table></div><script>
+        const rows = { 'navigator.webdriver (true means driven by a program)': navigator.webdriver, 'navigator.userAgent': navigator.userAgent,
+          'brands': (navigator.userAgentData?.brands ?? []).map((b) => b.brand + ' ' + b.version).join(', ') || '(none)', 'plugins': navigator.plugins.length,
+          'languages': navigator.languages.join(', '), 'window size': innerWidth + ' x ' + innerHeight + ' of screen ' + screen.width + ' x ' + screen.height };
+        for (const [k, v] of Object.entries(rows)) { const tr = document.createElement('tr'); for (const t of [k, String(v)]) { const td = document.createElement('td'); td.textContent = t; tr.append(td); } document.getElementById('seen').append(tr); }
+        window.__seen = rows;</script>`);
+    }
     try {
       if ((await handler(ctx)) === false) ctx.html('<h2>Page not found</h2>', 404);
     } catch (e) { send(500, 'text/plain', e.stack); }
