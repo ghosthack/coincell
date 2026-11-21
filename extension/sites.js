@@ -10,6 +10,7 @@ import fidelity from './sites/fidelity.js';
 import chase from './sites/chase.js';
 import ally from './sites/ally.js';
 import newrezServicing from './sites/newrez-servicing.js';
+import citi from './sites/citi.js';
 
 export const TARGETS = { demo: 'http://localhost:4690', real: 'http://localhost:4680' };
 
@@ -17,6 +18,7 @@ export const SITES = [
   { id: 'fidelity', name: 'Fidelity', match: /^https:\/\/digital\.fidelity\.com\//, capture: fidelity, target: 'real' },
   { id: 'chase', name: 'Chase', match: /^https:\/\/secure\.chase\.com\//, capture: chase, target: 'real' },
   { id: 'ally', name: 'Ally Bank', match: /^https:\/\/secure\.ally\.com\//, capture: ally, target: 'real' },
+  { id: 'citi', name: 'Citi', match: /^https:\/\/online\.citi\.com\//, capture: citi, target: 'real' },
   { id: 'newrez', name: 'Newrez', match: /^https:\/\/myaccount\.newrez\.com\//, file: 'sites/newrez.js', target: 'real' },
   { id: 'newrez', name: 'Newrez (account details)', match: /^https:\/\/servicing\.newrez\.com\//, capture: newrezServicing, target: 'real' },
   { id: 'harborline', name: 'Harborline Bank (demo)', match: /^http:\/\/localhost:4701\//, file: 'sites/demo/harborline.js', target: 'demo' },

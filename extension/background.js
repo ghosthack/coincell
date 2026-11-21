@@ -58,8 +58,10 @@ async function readByCapture(tab, site, log) {
   await chrome.scripting.registerContentScripts([{ id, matches: [`${origin}/*`], js: ['capture-main.js'], world: 'MAIN', runAt: 'document_start' }]);
   try {
     const captured = log.captured, shared = {};   // `shared` carries what one step learned on to the next page
-    for (const step of plan.steps) {
-      log.steps.push(step.live ? 'live page' : step.here ? 'reload of the current page' : step.go);
+    // Steps run in order. A step may add more once it knows what there is to visit (one page per account, say).
+    const queue = [...plan.steps];
+    for (let step = queue.shift(); step; step = queue.shift()) {
+      log.steps.push(step.live ? 'live page' : step.here ? 'reload of the current page' : step.go.replace(/=[^&]{12,}/g, '=:token'));
       if (step.live) {   // no loading of pages: start capturing on the page as it is, and let the step drive it
         if (plan.loggedOut?.test(new URL(tab.url).pathname + new URL(tab.url).hash)) throw new Error(LOGIN_FIRST);
         await chrome.scripting.executeScript({ target: { tabId: tab.id }, files: ['capture-main.js'], world: 'MAIN' });
@@ -75,7 +77,7 @@ async function readByCapture(tab, site, log) {
       else await chrome.tabs.update(tab.id, { url: origin + step.go });
       if (step.reload) await chrome.tabs.reload(tab.id);   // a change after the # alone does not load the page afresh
       const patterns = step.waitFor.map((r) => r.source), deadline = Date.now() + (step.timeout ?? 40_000);
-      let onLoginPage = 0;
+      let onLoginPage = 0, timedOut = false;
       for (;;) {
         await sleep(400);
         const now = await chrome.tabs.get(tab.id);
@@ -85,8 +87,12 @@ async function readByCapture(tab, site, log) {
         if (onLoginPage >= 10) throw new Error(LOGIN_FIRST);
         const have = await inPage(tab.id, (ps) => ps.map((p) => (window.__coincellCapture ?? []).some((e) => new RegExp(p).test(e.url) && e.status < 400)), [patterns]).catch(() => null);
         if (have?.every(Boolean)) break;   // null while the page is still loading
-        if (Date.now() > deadline) throw new Error(`${site.name} did not load its data${step.go ? ` on ${step.go}` : ''}. Is the page showing an error or a prompt?`);
+        if (Date.now() > deadline) {
+          if (step.optional) { timedOut = true; break; }   // one account's page not loading should not lose the rest
+          throw new Error(`${site.name} did not load its data${step.go ? ` on ${step.go}` : ''}. Is the page showing an error or a prompt?`);
+        }
       }
+      if (timedOut) { log.steps.push('  (that page did not load its data; skipped)'); captured.push(...await inPage(tab.id, () => (window.__coincellCapture ?? []).map(({ method, url, status, body, sent }) => ({ method, url, status, body, sent: sent?.body }))).catch(() => [])); continue; }
       if (step.alsoWait) {   // feeds that are welcome but not required: give them a few more seconds
         const extra = step.alsoWait.map((r) => r.source), until = Date.now() + 12_000;
         while (Date.now() < until) {
@@ -98,6 +104,7 @@ async function readByCapture(tab, site, log) {
       if (step.act) { const outcome = await inPage(tab.id, step.act, [shared]); if (outcome?.error) throw new Error(outcome.error); if (outcome && typeof outcome === 'object') Object.assign(shared, outcome); if (outcome?.detail) (log.asked ??= []).push(...outcome.detail); }
       await sleep(step.settle ?? 600);
       captured.push(...await inPage(tab.id, () => (window.__coincellCapture ?? []).map(({ method, url, status, body, sent }) => ({ method, url, status, body, sent: sent?.body }))));
+      if (step.expand) queue.unshift(...step.expand(shared));
     }
     // While a site script is still being worked out, save the SHAPE of the feeds it names:
     // field names and types with every value removed, as the recorder does.
