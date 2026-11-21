@@ -130,16 +130,22 @@ function drawFlow(d) {
   const c = begin(box, height);
   if (!c) return;
   const { svg, W, H } = c;
-  const narrow = W < 620, labelL = narrow ? 150 : 300, labelR = narrow ? 120 : 200, node = 8, pad = 10;
+  const narrow = W < 620, labelL = narrow ? 135 : 260, labelR = labelL, node = 8, pad = 10;   // equal label space on both sides keeps the diagram centred
   const scale = (H - 2 * pad - gap * (right.length - 1) - groupGap) / total;
-  const place = (items, extraAt) => {
-    const used = items.reduce((a, x) => a + Math.max(2, x.value * scale), 0) + gap * (items.length - 1) + (extraAt ? groupGap : 0);
+  // Stack a column of bars, centred. `spread` stretches the spacing so the column is as tall as
+  // the other one; without it the side with fewer bars ends up visibly shorter.
+  const place = (items, extraAt, spread) => {
+    const bars = items.reduce((a, x) => a + Math.max(2, x.value * scale), 0);
+    const g = spread && items.length > 1 ? Math.max(gap, Math.min(70, (spread - bars) / (items.length - 1))) : gap;
+    const used = bars + g * (items.length - 1) + (extraAt ? groupGap : 0);
     let yy = (H - used) / 2;
-    items.forEach((it, i) => { if (extraAt && i === extraAt) yy += groupGap; it.y = yy; it.h = Math.max(2, it.value * scale); yy += it.h + gap; });
+    items.forEach((it, i) => { if (extraAt && i === extraAt) yy += groupGap; it.y = yy; it.h = Math.max(2, it.value * scale); yy += it.h + g; });
+    return used;
   };
-  place(left); place(right, f.spending.length);
-  const mid = { x: W / 2 - node / 2, h: total * scale }; mid.y = (H - mid.h) / 2;
+  const tall = place(right, f.spending.length);
+  place(left, 0, tall);
   const xl = labelL, xr = W - labelR - node;
+  const mid = { x: (xl + node + xr) / 2 - node / 2, h: total * scale }; mid.y = (H - mid.h) / 2;
   const ribbon = (x0, y0, h0, x1, y1, h1, color, name, value) => {
     const xm = (x0 + x1) / 2;
     const p = s('path', { d: `M${x0},${y0}C${xm},${y0} ${xm},${y1} ${x1},${y1}V${y1 + h1}C${xm},${y1 + h1} ${xm},${y0 + h0} ${x0},${y0 + h0}Z`, fill: color, 'fill-opacity': 0.28, tabindex: 0 });
@@ -156,12 +162,12 @@ function drawFlow(d) {
   for (const it of left) {
     svg.append(s('rect', { x: xl, y: it.y, width: node, height: it.h, rx: 2, fill: it.color }),
       // one line per source, mirroring the right side: amount in its own column, name beside the bar
-      s('text', { x: xl - 8, y: it.y + it.h / 2 + 4, 'text-anchor': 'end', class: 'ink' }, clip(nice(it.name), narrow ? 14 : 36)),
+      s('text', { x: xl - 8, y: it.y + it.h / 2 + 4, 'text-anchor': 'end', class: 'ink' }, clip(nice(it.name), narrow ? 13 : 30)),
       s('text', { x: 2, y: it.y + it.h / 2 + 4 }, money(it.value)));
   }
   for (const it of right) {
     svg.append(s('rect', { x: xr, y: it.y, width: node, height: it.h, rx: 2, fill: it.color }),
-      s('text', { x: xr + node + 8, y: it.y + it.h / 2 + 4, class: 'ink' }, clip(it.name, narrow ? 12 : 24)),
+      s('text', { x: xr + node + 8, y: it.y + it.h / 2 + 4, class: 'ink' }, clip(it.name, narrow ? 13 : 30)),
       s('text', { x: W - 2, y: it.y + it.h / 2 + 4, 'text-anchor': 'end' }, money(it.value)));
   }
   svg.append(s('text', { x: W / 2, y: mid.y - 6 < 12 ? 12 : mid.y - 6, 'text-anchor': 'middle', class: 'strong' }, money(total)));
