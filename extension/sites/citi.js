@@ -21,13 +21,14 @@ const flexDate = (s) => {
 const amount = (v) => (typeof v === 'number' ? v : parseMoney(v?.amount ?? v));
 
 // ---- what each account page does once it has loaded (these run in the page) ----
-const bankPage = async () => {
+const bankPage = async (shared) => {
   const sleep = (ms) => new Promise((r) => setTimeout(r, ms));
   const seen = () => window.__coincellCapture ?? [];
   const own = seen().filter((e) => /\/bankLedger\/accounts\/[^/]+\/(transactionDetails|transactions)\//.test(e.url) && e.status < 400 && e.sent?.body).at(-1);
   if (!own) return;
   // The page offers a list of periods; ask for each longer one, keeping whatever answers.
-  const periods = [...new Set(seen().flatMap((e) => e.body?.searchFilterConfig?.timePeriodList ?? []).map((p) => p.key).filter(Boolean))];
+  // (The list comes with the dashboard's own answers, so it is handed over from that step.)
+  const periods = [...new Set([...(shared?.periods ?? []), ...seen().flatMap((e) => e.body?.searchFilterConfig?.timePeriodList ?? []).map((p) => p.key)].filter(Boolean))];
   const asked = JSON.parse(own.sent.body);
   for (const key of periods.reverse()) {
     if (key === asked.dateFilterIndicator) continue;
@@ -41,13 +42,10 @@ const cardPage = async () => {
   const seen = () => window.__coincellCapture ?? [];
   const own = seen().filter((e) => /\/cbol\/accounts\/[^/]+\/transactions\/retrieve/.test(e.url) && e.status < 400 && e.sent?.body).at(-1);
   if (!own) return;
-  // The page lists the periods it can show (statements and ranges); ask for each in turn.
-  const asked = JSON.parse(own.sent.body);
-  for (const f of (own.body?.accountActivityFilters?.timePeriodFilters ?? []).slice(0, 14)) {
-    if (!f.filterIndicator) continue;
-    await fetch(own.url, { method: 'POST', headers: own.sent.headers, body: JSON.stringify({ ...asked, timePeriodFilter: f.filterIndicator }), credentials: 'include' }).catch(() => null);
-    await sleep(500);
-  }
+  // Only what the page itself loads (the current period) is used. The page lists earlier periods,
+  // but asking for them the obvious way was refused by Citi, and the recording has no example of
+  // the page doing it. To be added once a card with activity has been recorded choosing one.
+  await sleep(200);
 };
 const investmentPage = async () => {
   const sleep = (ms) => new Promise((r) => setTimeout(r, ms));
@@ -77,7 +75,7 @@ export default {
       const seen = window.__coincellCapture ?? [];
       const tiles = seen.find((e) => /\/dashboardTiles\/accountDetails/.test(e.url) && e.body)?.body ?? {};
       const brokerage = seen.find((e) => /\/dashboardTiles\/brokerageAccountDetails/.test(e.url) && e.body)?.body ?? {};
-      return { open: [
+      return { periods: [...new Set(seen.flatMap((e) => e.body?.searchFilterConfig?.timePeriodList ?? []).map((p) => p.key).filter(Boolean))], open: [
         ...(tiles.bankAccount?.accountDetails ?? []).map((a) => ({ id: a.accountId, kind: a.accountSubType })),
         ...(tiles.creditCardAccount?.accountDetails ?? []).map((a) => ({ id: a.accountId, kind: 'CREDITCARD' })),
         ...(brokerage.brokerageAccount?.brokerageAccountDetails ?? []).map((a) => ({ id: a.accountId, kind: 'INVESTMENT' })),
