@@ -39,6 +39,11 @@
   /* Selects and buttons share one height, so a picker and the button beside it line up exactly. */
   select, button { font: inherit; color: inherit; background: var(--surface-1); border: 1px solid var(--border);
     border-radius: 7px; padding: 0 12px; height: 34px; line-height: 1; box-sizing: border-box; margin: 0; vertical-align: middle; }
+  /* The browser's own caret sits hard against the border, so the select draws its own: two small
+     gradients forming a downward triangle, set in from the right edge with room around it. */
+  select { appearance: none; -webkit-appearance: none; padding-right: 34px; cursor: pointer; background-repeat: no-repeat; background-size: 5px 5px;
+    background-image: linear-gradient(45deg, transparent 50%, var(--text-secondary) 50%), linear-gradient(135deg, var(--text-secondary) 50%, transparent 50%);
+    background-position: calc(100% - 18px) 55%, calc(100% - 13px) 55%; }
   button { cursor: pointer; }
   button:hover:not(:disabled) { border-color: var(--text-muted); }
   button:disabled { opacity: .55; cursor: default; }
