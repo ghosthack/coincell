@@ -190,6 +190,8 @@ function allocation(holdings, cfg) {
     symbols.set(h.symbol, s);
     s.value += h.value; s.accounts++;
   }
+  // A negative cash position is money borrowed against the account (margin), so say that.
+  if ((classes.get('Cash') ?? 0) < 0) { classes.set('Borrowed on margin', classes.get('Cash')); classes.delete('Cash'); }
   for (const name of Object.keys(cfg.allocationTargets)) if (!classes.has(name)) classes.set(name, 0);
   return {
     total,

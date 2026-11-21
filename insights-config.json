@@ -5,7 +5,7 @@
   "returns": { "low": 0.03, "mid": 0.05, "high": 0.07 },
   "allocationTargets": {},
   "assetClasses": {},
-  "assetTypes": {},
+  "assetTypes": { "Equity": "Stocks", "Stock": "Stocks", "Exchange Traded": "ETFs", "ETF": "ETFs", "Mutual Fund": "Mutual funds", "Cash & Money Market Funds": "Cash", "Fixed Income": "Bonds", "Others": "Other" },
   "categories": [
     { "category": "Fees & interest", "match": "\\bFEE\\b|INTEREST CHARGE|OVERDRAFT|LATE CHARGE" },
     { "category": "Housing", "match": "\\bRENT\\b|APARTMENTS|MORTGAGE|\\bMTG\\b|\\bHOA\\b" },
