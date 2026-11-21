@@ -7,11 +7,14 @@
 //   each checking/savings page      -> its transactions
 //   each card page                  -> its transactions, limit and statement balance
 //   the investment positions feed   -> holdings per investment account
+//   the investment activity feed    -> its transactions, for the last 90 days (the most Chase offers)
 import { balanceHistory } from '../shared.js';
 
 const TILES = /\/dashboard\/tiles\/list/, CARD_DETAIL = /\/account\/detail\/card\/list/;
 const DDA_TXNS = /\/etu-dda-transactions\/v4\/transactions/, CARD_TXNS = /\/etu-transactions\/v4\/accounts\/transactions/;
 const INVESTMENT_LIST = /\/portfolio\/account\/options\/list2/, POSITIONS = /\/digital-investment-positions\/v4\/positions/;
+const INVESTMENT_ACTIVITY = /\/digital-investment-transactions\/v2\/accounts-activities/;
+const ACTIVITY_KINDS = { Reinvest: 'Buy', Buy: 'Buy', Sell: 'Sell', Dividend: 'Dividend', Interest: 'Interest', Fee: 'Fee', Deposit: 'Deposit', Withdrawal: 'Withdrawal' };
 const ymd = (s) => (/^\d{8}$/.test(String(s ?? '')) ? `${s.slice(0, 4)}-${s.slice(4, 6)}-${s.slice(6, 8)}` : /^\d{4}-\d{2}-\d{2}/.test(String(s ?? '')) ? String(s).slice(0, 10) : null);
 const cents = (n) => Math.round(n * 100) / 100;
 
@@ -109,6 +112,10 @@ export default {
             headers: { ...fresh(headers), 'content-type': 'application/json' },
             body: JSON.stringify({ selectorIdentifier: String(a.accountId), selectorCode: 'ACCOUNT', intradayUpdateIndicator: true, topPositionsRequestedRecordCount: 5, accountStatusIndicator: true, moversRequestedRecordCount: 5 }) }).catch(() => null);
           await sleep(700);
+          await fetch('/svc/wr/dwm/secure/gateway/investments/servicing/inquiry-maintenance/digital-investment-transactions/v2/accounts-activities?fpl-preferred-loan-indicator=true', { method: 'POST', credentials: 'include',
+            headers: { ...fresh(headers), 'content-type': 'application/json' },
+            body: JSON.stringify({ selectorIdentifier: String(a.accountId), selectorCode: 'ACCOUNT', activityCategory: { transactionTypeCode: '1', transactionCategoryCode: 'TRID' }, timePeriodName: 'LAST_90' }) }).catch(() => null);
+          await sleep(700);
         }
       }
       location.hash = '#/dashboard/overview';
@@ -175,6 +182,20 @@ export default {
       holdings += list.length;
       accounts.set(String(info.accountId), { id: String(info.accountId), name: info.nickname || 'Chase investment account', mask: info.mask, type: info.retirement ? 'retirement' : 'investment',
         balance: cents(list.reduce((s, h) => s + h.value, 0)), holdings: list, txns: new Map() });
+    }
+
+    for (const c of captured) {   // investment activity: reinvestments, interest and the like
+      if (!INVESTMENT_ACTIVITY.test(c.url) || c.status >= 400) continue;
+      const counts = new Map();
+      for (const t of c.body?.accountActivities ?? []) {
+        const a = accounts.get(String(t.digitalAccountIdentifier)), date = ymd(t.transactionPostDate) ?? ymd(t.transactionDate) ?? ymd(t.tradeDate);
+        if (!a || !date || t.accountActivityPendingStatusIndicator || typeof t.transactionAmount !== 'number' || t.transactionAmount === 0) continue;
+        const description = String(t.transactionDescription ?? t.activityTypeCode ?? 'Investment activity').replace(/\s+/g, ' ').trim();
+        // Chase gives these no number of their own, so identical lines on one day are told apart by order.
+        const key = `${date}|${t.transactionAmount}|${description}|${t.tradedUnitQuantity ?? ''}`, n = (counts.get(key) ?? 0) + 1;
+        counts.set(key, n);
+        a.txns.set(`${key}|${n}`, { id: `inv-${key}|${n}`.replace(/\s+/g, '_'), date, description, amount: t.transactionAmount, category: ACTIVITY_KINDS[t.activityTypeCode] ?? t.activityTypeCode ?? 'Other' });
+      }
     }
 
     const out = [...accounts.values()].map(({ txns, ...a }) => {
