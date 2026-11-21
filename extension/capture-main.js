@@ -33,7 +33,13 @@
   XMLHttpRequest.prototype.setRequestHeader = function (name, value) { try { if (this.__cc) this.__cc.headers[String(name).toLowerCase()] = String(value); } catch { /* ignore */ } return setHeader.apply(this, arguments); };
   XMLHttpRequest.prototype.send = function (body) {
     const info = this.__cc;
-    if (info) this.addEventListener('load', () => { try { if (this.responseType === '' || this.responseType === 'text') keep(info.method, info.url, this.status, this.responseText, { headers: info.headers, body: typeof body === 'string' ? body : undefined }); } catch { /* ignore */ } });
+    if (info) this.addEventListener('load', async () => {
+      try {   // the answer may be text, a ready-made object, a blob or raw bytes, depending on how the page asked
+        const r = this.response, kind = this.responseType;
+        const text = kind === '' || kind === 'text' ? this.responseText : kind === 'json' ? JSON.stringify(r) : kind === 'blob' ? await r.text() : kind === 'arraybuffer' ? new TextDecoder().decode(r) : '';
+        keep(info.method, info.url, this.status, text, { headers: info.headers, body: typeof body === 'string' ? body : undefined });
+      } catch { /* ignore */ }
+    });
     return send.apply(this, arguments);
   };
 })();

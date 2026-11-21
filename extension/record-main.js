@@ -79,7 +79,13 @@
   XMLHttpRequest.prototype.setRequestHeader = function (name) { try { this.__cc?.headers.push(String(name).toLowerCase()); } catch { /* ignore */ } return setHeader.apply(this, arguments); };
   XMLHttpRequest.prototype.send = function (body) {
     const info = this.__cc;
-    if (info) this.addEventListener('load', () => { try { const text = this.responseType === '' || this.responseType === 'text' ? this.responseText : this.responseType === 'json' ? JSON.stringify(this.response) : ''; note(info.method, info.url, this.status, text, body, info.headers, this.getResponseHeader('content-type') ?? ''); } catch { /* ignore */ } });
+    if (info) this.addEventListener('load', async () => {
+      try {
+        const r = this.response, kind = this.responseType;
+        const text = kind === '' || kind === 'text' ? this.responseText : kind === 'json' ? JSON.stringify(r) : kind === 'blob' ? await r.text() : kind === 'arraybuffer' ? new TextDecoder().decode(r) : '';
+        note(info.method, info.url, this.status, text, body, info.headers, this.getResponseHeader('content-type') ?? '');
+      } catch { /* ignore */ }
+    });
     return send.apply(this, arguments);
   };
 

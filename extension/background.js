@@ -13,6 +13,13 @@ async function post(base, path, body) {
   return out;
 }
 
+const shapeOf = (v, depth = 0) => {
+  if (v === null) return 'null';
+  if (Array.isArray(v)) return v.length ? [shapeOf(v[0], depth + 1), `(${v.length} items)`] : [];
+  if (typeof v === 'object') return depth > 9 ? '{...}' : Object.fromEntries(Object.entries(v).map(([k, x]) => [k.replace(/[0-9]{4,}/g, '#'), shapeOf(x, depth + 1)]));
+  if (typeof v === 'string') return /^-?[\d,.]+$/.test(v) ? 'numeric-string' : 'string';
+  return typeof v;
+};
 const LOGIN_FIRST = 'You are not logged in to this site. Log in, then press the button again.';
 const sleep = (ms) => new Promise((r) => setTimeout(r, ms));
 const inPage = async (tabId, func, args = []) => (await chrome.scripting.executeScript({ target: { tabId }, world: 'MAIN', func, args }))[0].result;
@@ -44,9 +51,22 @@ async function readByCapture(tab, site) {
         if (have?.every(Boolean)) break;   // null while the page is still loading
         if (Date.now() > deadline) throw new Error(`${site.name} did not load its data on ${step.go}. Is the page showing an error or a prompt?`);
       }
+      if (step.alsoWait) {   // feeds that are welcome but not required: give them a few more seconds
+        const extra = step.alsoWait.map((r) => r.source), until = Date.now() + 12_000;
+        while (Date.now() < until) {
+          const have = await inPage(tab.id, (ps) => ps.every((p) => (window.__coincellCapture ?? []).some((e) => new RegExp(p).test(e.url))), [extra]).catch(() => false);
+          if (have) break;
+          await sleep(400);
+        }
+      }
       if (step.act) await inPage(tab.id, step.act);
       await sleep(step.settle ?? 600);
       captured.push(...await inPage(tab.id, () => (window.__coincellCapture ?? []).map(({ method, url, status, body }) => ({ method, url, status, body }))));
+    }
+    // While a site script is still being worked out, save the SHAPE of the feeds it names:
+    // field names and types with every value removed, as the recorder does.
+    for (const c of captured) {
+      if (plan.describe?.some((r) => r.test(c.url))) await post(TARGETS[site.target], '/api/recordings', { host: new URL(c.url).hostname, entry: { kind: 'data', method: c.method, url: c.url.replace(/\?.*/, ''), status: c.status, shape: shapeOf(c.body) } }).catch(() => {});
     }
     return plan.build(captured);
   } finally {

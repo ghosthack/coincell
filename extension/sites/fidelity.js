@@ -1,7 +1,8 @@
 // Fidelity, by capture. Opens your Positions page and your Activity page in the tab and uses the
 // answers those pages receive: the account list with balances, and the activity list.
 // Written from a masked recording, so the field names are known but no real values were seen.
-// Holdings are not included yet; Fidelity delivers positions some other way.
+// Holdings come from the positions feed. Its exact layout has not been seen yet, so they are
+// found by what a position looks like: something with a symbol and a market value, under an account.
 import { today } from '../shared.js';
 
 const ACTIONS = [
@@ -16,12 +17,39 @@ const ACTIONS = [
   [/FUNDS TRANSFER PAID|TRANSFERRED TO|WITHDRAWAL|DIRECT DEBIT|BILL PAYMENT|CHECK PAID|DEBIT CARD/i, 'Withdrawal'],
 ];
 const RETIREMENT = /\bIRA\b|ROTH|ROLLOVER|401|403|457|PENSION|\bSEP\b|RETIRE|WORKPLACE/i;
+// Walk the positions feed looking for positions: objects with a symbol and a market value.
+// The account they belong to is the nearest account number above them.
+const number = (v) => (typeof v === 'number' ? v : typeof v === 'string' && /^-?[\d.]+$/.test(v) ? Number(v) : null);
+function numbersIn(node, depth = 0, prefix = '', out = []) {
+  if (!node || typeof node !== 'object' || Array.isArray(node) || depth > 3) return out;
+  for (const [k, v] of Object.entries(node)) {
+    const n = number(v);
+    if (n != null) out.push([`${prefix}${k}`.toLowerCase(), n, depth]); else numbersIn(v, depth + 1, `${prefix}${k}.`, out);
+  }
+  return out;
+}
+function findPositions(node, acct, out) {
+  if (Array.isArray(node)) { for (const x of node) findPositions(x, acct, out); return; }
+  if (!node || typeof node !== 'object') return;
+  const here = [node.acctNum, node.accountNumber, node.acctNumber].find((v) => typeof v === 'string' && v) ?? acct;
+  if (typeof node.symbol === 'string' && node.symbol && here) {
+    const nums = numbersIn(node).sort((a, b) => a[2] - b[2]);   // prefer fields nearest the position itself
+    const pick = (re) => nums.find(([path]) => re.test(path.split('.').at(-1)))?.[1] ?? null;
+    const value = pick(/^(marketval|mktval|marketvalue|mktvalue|currentvalue|currentval|totalmarketval)$/);
+    if (value != null) {
+      out.push({ acct: here, symbol: node.symbol, value, name: [node.securityDescription, node.securityDesc, node.symbolDesc, node.description, node.desc, node.securityDetail?.desc].find((v) => typeof v === 'string' && v),
+        quantity: pick(/^(quantity|qty|shares|sharequantity)$/), price: pick(/^(lastprice|price|currentprice|lastpx)$/), costBasis: pick(/^(costbasis|totalcostbasis|costbasistotal|totalcost)$/) });
+      return;
+    }
+  }
+  for (const v of Object.values(node)) findPositions(v, here, out);
+}
 const isoDate = (n) => today(new Date(n < 1e11 ? n * 1000 : n));   // seconds or milliseconds since 1970
 
 export default {
   loggedOut: /login|signin|logout|\/session\//i,
   steps: [
-    { go: '/ftgw/digital/portfolio/positions', waitFor: [/\/portfolio\/api\/GetContext/] },
+    { go: '/ftgw/digital/portfolio/positions', waitFor: [/\/portfolio\/api\/GetContext/], alsoWait: [/\/poswebex\/api\/positions$/], settle: 1500 },
     { go: '/ftgw/digital/portfolio/activity', waitFor: [/\/activityapi\/api\/v1\/transactions\/history/], settle: 1500,
       // The Activity page only loads its default range (about 30 days). To go further back, repeat
       // the page's own request, unchanged except for the dates, in 90-day steps for up to two years.
@@ -45,6 +73,7 @@ export default {
         }
       } },
   ],
+  describe: [/\/poswebex\/api\/positions$/],
   build(captured) {
     const context = captured.find((c) => /GetContext/.test(c.url) && c.body?.getContext?.person?.assets)?.body.getContext.person;
     if (!context) throw new Error('Fidelity did not send the account list');
@@ -70,8 +99,24 @@ export default {
         a.transactions.push({ date: isoDate(date), description, amount, category: ACTIONS.find(([re]) => re.test(description))?.[1] ?? 'Other' });
       }
     }
+    const found = [];
+    for (const c of captured) if (/\/poswebex\/api\/positions$/.test(c.url)) findPositions(c.body, null, found);
+    for (const p of found) {
+      const a = accounts.get(p.acct);
+      if (!a) continue;
+      const cash = /\*\*$/.test(p.symbol) || /^(CORE|CASH)\b|MONEY MARKET/i.test(p.name ?? '');
+      const symbol = cash ? 'CASH' : p.symbol;
+      a.holdings ??= new Map();
+      const h = a.holdings.get(symbol) ?? { symbol, name: cash ? 'Cash & money market' : p.name, quantity: 0, value: 0, price: cash ? 1 : p.price, costBasis: null };
+      a.holdings.set(symbol, h);
+      h.value += p.value;
+      h.quantity += cash ? p.value : p.quantity ?? 0;
+      if (!cash && p.costBasis != null) h.costBasis = (h.costBasis ?? 0) + p.costBasis;
+    }
+    let holdings = 0;
+    for (const a of accounts.values()) if (a.holdings) { a.holdings = [...a.holdings.values()]; holdings += a.holdings.length; }
     const out = [...accounts.values()];
     if (!out.length) throw new Error('Fidelity sent an account list, but none of the accounts carried a balance');
-    return { accounts: out, note: `${out.reduce((s, a) => s + a.transactions.length, 0)} transactions${skipped ? `, ${skipped} skipped for accounts without a balance` : ''}` };
+    return { accounts: out, note: `${holdings} holdings, ${out.reduce((s, a) => s + a.transactions.length, 0)} transactions${skipped ? `, ${skipped} skipped for accounts without a balance` : ''}` };
   },
 };
