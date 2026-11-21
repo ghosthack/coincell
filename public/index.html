@@ -36,14 +36,15 @@
   .card { background: var(--surface-1); border: 1px solid var(--border); border-radius: 10px; padding: 16px; min-width: 0; }
   .card-head { display: flex; justify-content: space-between; align-items: center; gap: 12px; margin-bottom: 12px; flex-wrap: wrap; }
   .controls { display: flex; gap: 8px; align-items: center; }
+  /* Selects and buttons share one height, so a picker and the button beside it line up exactly. */
   select, button { font: inherit; color: inherit; background: var(--surface-1); border: 1px solid var(--border);
-    border-radius: 7px; padding: 6px 10px; }
+    border-radius: 7px; padding: 0 12px; height: 34px; line-height: 1; box-sizing: border-box; margin: 0; vertical-align: middle; }
   button { cursor: pointer; }
   button:hover:not(:disabled) { border-color: var(--text-muted); }
   button:disabled { opacity: .55; cursor: default; }
   button.primary { background: var(--text-primary); color: var(--surface-1); border-color: var(--text-primary); }
   .seg { display: inline-flex; border: 1px solid var(--border); border-radius: 7px; overflow: hidden; }
-  .seg button { border: 0; border-radius: 0; padding: 4px 10px; color: var(--text-secondary); }
+  .seg button { border: 0; border-radius: 0; padding: 0 10px; height: 28px; color: var(--text-secondary); }
   .seg button[aria-pressed="true"] { background: var(--grid); color: var(--text-primary); font-weight: 600; }
   /* Sync controls sit in the top right corner, with the status line tucked under them and aligned to the same edge. */
   .sync { align-self: flex-start; display: flex; flex-direction: column; align-items: flex-end; gap: 6px; margin-left: auto; }
