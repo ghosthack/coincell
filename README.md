@@ -1,6 +1,6 @@
-<img src="icon/coincell.png" width="128" align="right" alt="A polished 3D lithium coin cell with a plus sign and the word coincell stamped into its face">
+<p align="center"><img src="icon/coincell.png" width="160" alt="A polished 3D lithium coin cell with a plus sign and the word coincell stamped into its face"></p>
 
-# coincell
+<h1 align="center">coincell</h1>
 
 A local dashboard for your own money. It logs in to each of your banks, cards, brokers and lenders with a
 real browser, reads balances, holdings and transactions, and shows them together: net worth over time, cash
