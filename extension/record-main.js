@@ -56,7 +56,7 @@
   const cleanUrl = (u) => {
     const x = new URL(u, location.href);
     for (const [k, v] of [...x.searchParams.entries()]) x.searchParams.set(k, safeWord(v) ? v : '_');
-    return x.origin + x.pathname.replace(/[0-9a-f-]{16,}|\d{4,}/gi, ':id') + x.search + x.hash.replace(/[0-9a-f-]{16,}|\d{4,}/gi, ':id').replace(/=[^&;/]*[a-z][^&;/]*/g, (m) => (safeWord(m.slice(1)) ? m : '=_'));
+    return x.origin + x.pathname.replace(/[A-Za-z0-9_-]{24,}/g, ':token').replace(/[0-9a-f-]{16,}|\d{4,}/gi, ':id') + x.search + x.hash.replace(/[0-9a-f-]{16,}|\d{4,}/gi, ':id').replace(/=[^&;/]*[a-z][^&;/]*/g, (m) => (safeWord(m.slice(1)) ? m : '=_'));
   };
   // Only the site's own services matter; analytics, chat widgets and the like are skipped.
   const siteRoot = location.hostname.split('.').slice(-2).join('.');

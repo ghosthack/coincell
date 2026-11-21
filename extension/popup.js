@@ -9,7 +9,7 @@ const site = siteFor(tab?.url);
 const origin = isWeb ? new URL(tab.url).origin : null;
 
 $('site').textContent = site ? site.name : isWeb ? new URL(tab.url).hostname : 'No website in this tab';
-$('hint').textContent = site ? (site.capture ? 'Log in first. This tab will open the pages it needs by itself.' : 'Log in to the site first if you have not.') : isWeb ? 'coincell does not know this site yet. Record it so a script can be written.' : '';
+$('hint').textContent = site ? (site.capture ? 'Log in first. This tab will move through the pages it needs by itself.' : 'Log in to the site first if you have not.') : isWeb ? 'coincell does not know this site yet. Record it so a script can be written.' : '';
 $('send').disabled = !site;
 $('record').disabled = !isWeb;
 

@@ -59,6 +59,15 @@ async function readByCapture(tab, site) {
   try {
     const captured = [];
     for (const step of plan.steps) {
+      if (step.live) {   // no loading of pages: start capturing on the page as it is, and let the step drive it
+        if (plan.loggedOut?.test(new URL(tab.url).pathname + new URL(tab.url).hash)) throw new Error(LOGIN_FIRST);
+        await chrome.scripting.executeScript({ target: { tabId: tab.id }, files: ['capture-main.js'], world: 'MAIN' });
+        const outcome = await inPage(tab.id, step.act);
+        if (outcome?.error) throw new Error(outcome.error);
+        await sleep(step.settle ?? 600);
+        captured.push(...await inPage(tab.id, () => (window.__coincellCapture ?? []).map(({ method, url, status, body, sent }) => ({ method, url, status, body, sent: sent?.body }))));
+        continue;
+      }
       await chrome.tabs.update(tab.id, { url: origin + step.go });
       if (step.reload) await chrome.tabs.reload(tab.id);   // a change after the # alone does not load the page afresh
       const patterns = step.waitFor.map((r) => r.source), deadline = Date.now() + (step.timeout ?? 40_000);
