@@ -260,6 +260,10 @@ async function listen(name) {
         const { reloadedFor } = await chrome.storage.local.get('reloadedFor');
         if (reloadedFor !== `${mine}>${cmd.want}`) { await chrome.storage.local.set({ reloadedFor: `${mine}>${cmd.want}` }); return chrome.runtime.reload(); }
       }
+      if (cmd.type === 'retry') {   // you asked for the saved login to be tried again: forget the marks against it
+        const key = `${name}:${cmd.site}`, { tries = {}, rejected = {} } = await chrome.storage.local.get(['tries', 'rejected']);
+        delete tries[key]; delete rejected[key]; await chrome.storage.local.set({ tries, rejected });
+      }
       if (cmd.type === 'describe') { const site = SITES.find((s) => s.id === cmd.site && s.target === name && s.loggedIn); if (site) describe(site).catch(() => {}); }
       if (cmd.type === 'refresh') (async () => { for (const id of cmd.sites) { const site = SITES.find((s) => s.id === id && s.target === name && s.loggedIn); if (site) await refreshOne(site); } })();
     }
