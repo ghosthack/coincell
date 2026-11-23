@@ -296,9 +296,9 @@ function showStanding(st) {
   latest = st;
   // Settings: one row per institution the extension can sign in to.
   table($('logins'), [
-    { label: 'Institution', get: (r) => r.name },
-    { label: 'Saved login', get: (r) => (r.isDefault ? '–' : r.loginSavedAt ? `Saved ${ago(r.loginSavedAt)}` : 'None'), cls: 'muted' },
-    { label: 'Codes arrive in', get: (r) => (r.isDefault ? st.codesInbox || 'The first Gmail signed in to in Chrome' : r.inbox || 'Default inbox'), cls: 'muted' },
+    // Two columns, so it fits a phone: the name with its details underneath, and the button.
+    { label: 'Institution', get: (r) => [r.name, el('div', { class: 'muted' }, r.isDefault ? `Codes are read from ${st.codesInbox || 'the first Gmail signed in to in Chrome'}`
+      : `${r.loginSavedAt ? `Login saved ${ago(r.loginSavedAt)}` : 'No login saved'} · codes arrive in ${r.inbox || 'the default inbox'}`)] },
     { label: '', num: true, get: (r) => el('button', { class: 'small', 'data-login': r.id }, r.isDefault || r.loginSavedAt ? 'Change' : 'Save a login…') },
   ], st.institutions.some((i) => i.canSignIn) ? [{ id: DEFAULT, name: 'Default inbox', isDefault: true }, ...st.institutions.filter((i) => i.canSignIn)] : [], st.extension ? 'The extension cannot sign in to any of your institutions yet.' : 'Open Chrome with the coincell extension loaded to set this up.');
   $('store-note').textContent = `Logins are kept in ${st.loginStore}.`;
