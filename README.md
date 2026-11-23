@@ -29,7 +29,7 @@ npx playwright install chromium   # only if Google Chrome is not installed
 npm run demo                      # http://localhost:4690, then press "Sync now"
 ```
 
-- `npm run demo`: start the made-up institutions (ports 4701-4705) and the demo dashboard together.
+- `npm run demo`: start the made-up institutions (ports 4701-4705, and a demo inbox on 4706) and the demo dashboard together.
   Harborline Bank (checking + savings), Kestrel Card, Copperleaf Card, Meridian Wealth (brokerage, Roth IRA, 401(k))
   and Lakeshore Home Loans (mortgage). Their logins are filled in automatically.
 - `npm run demo:sync`: sync every demo institution from the command line (same as the "Sync now" button).
@@ -54,6 +54,31 @@ The dashboard and the extension also talk to each other. **Refresh all** on the 
 open each institution in a background tab and read it; one you are not logged in to is left open on its login
 page and marked as needing a login. And logging in to a known site is itself the cue to read it, with nothing to
 press (the popup has a switch for this). The Institutions table on the dashboard shows where each one stands.
+
+#### Signing in for you
+
+Sessions at banks run out within the hour, so a refresh usually finds a login page. coincell can sign in itself:
+
+1. Run coincell as a login item with `npm run service`, so the macOS Keychain is available to it.
+2. In the dashboard's Institutions table, press **Save a login…** for each institution. The login is kept in the
+   macOS Keychain (service `coincell`) and never in this folder.
+3. If a site emails sign-in codes, have them sent to one Gmail inbox, sign in to that inbox in the same Chrome,
+   and name it under the table.
+4. Press **Allow sign-in help** in the extension's popup. Chrome asks you to confirm.
+
+From then on a refresh fills the saved login in on the site's own sign-in page, enters an emailed code, and
+accepts "remember this device" where offered. The limits are deliberate:
+
+- A login is filled in only on addresses listed as that site's sign-in pages in `extension/sites.js`.
+- A login the site turns down is tried once and not again until you save it anew, so nothing can lock your account.
+- Only Gmail's feed of unread mail is read, only mail from the site's own sender is looked at, and none of it is kept.
+- A text message, an app prompt, a security question or a puzzle is left to you: the tab stays open and the site
+  is read as soon as you are in.
+- Fields are set the plain way and the page is told about it. Nothing pretends to be a person, and nothing hides
+  that a program is filling in the form. A site that objects will say so, and then that login stays yours to do.
+
+Any program running as you on this computer could ask coincell for a saved login, just as it could ask the
+Keychain. Web pages cannot.
 
 For a site coincell does not know yet, press **Start recording this site**, browse your accounts, positions and
 activity pages, and stop. The recording goes to `.data/recordings/` and holds the layout of the site's pages and

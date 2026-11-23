@@ -77,6 +77,16 @@
   .tile .sub { font-size: 12px; }
   tr.group td { font-size: 12px; font-weight: 600; color: var(--text-secondary); padding-top: 14px; border-bottom: 1px solid var(--border); }
   button.small { height: 26px; padding: 0 9px; font-size: 12px; }
+  input[type=text], input[type=email], input[type=password], input:not([type]) { font: inherit; color: inherit; background: var(--surface-1); border: 1px solid var(--border); border-radius: 7px; height: 30px; padding: 0 9px; box-sizing: border-box; }
+  p.bad { color: var(--critical); }
+  .inline-form { display: flex; align-items: center; gap: 8px; flex-wrap: wrap; }
+  .inline-form input { height: 26px; font-size: 12px; width: 220px; }
+  dialog { border: 1px solid var(--border); border-radius: 12px; background: var(--surface-1); color: var(--text-primary); padding: 20px; width: min(380px, calc(100vw - 48px)); }
+  dialog::backdrop { background: rgb(0 0 0 / .35); }
+  dialog h2 { margin: 0 0 4px; font-size: 16px; } dialog p { margin: 0 0 12px; }
+  dialog label { display: block; font-size: 12px; color: var(--text-secondary); margin: 10px 0 4px; }
+  dialog input { width: 100%; }
+  .dialog-actions { display: flex; gap: 8px; margin-top: 18px; } .dialog-actions span { flex: 1; }
   .tag { display: inline-block; font-size: 11px; color: var(--text-secondary); border: 1px solid var(--border); border-radius: 999px; padding: 0 7px; margin-left: 6px; white-space: nowrap; }
   [hidden] { display: none !important; }
   .viz { position: relative; margin-bottom: 12px; }
@@ -150,7 +160,23 @@
   <section class="card">
     <div class="card-head"><h2>Institutions</h2><span class="sub" id="ext-note"></span></div>
     <div class="scroll" id="institutions"></div>
+    <form class="foot inline-form" id="inbox-form" hidden>
+      <label for="inbox">Inbox that sign-in codes are emailed to</label>
+      <input id="inbox" type="email" placeholder="name@gmail.com" autocomplete="off" spellcheck="false">
+      <button class="small">Save</button><span class="muted" id="inbox-note"></span>
+    </form>
   </section>
+
+  <dialog id="login-dialog">
+    <form method="dialog" id="login-form">
+      <h2 id="login-title">Saved login</h2>
+      <p class="muted" id="login-note"></p>
+      <label for="login-user">Username</label><input id="login-user" autocomplete="off" spellcheck="false" autocapitalize="off">
+      <label for="login-pass">Password</label><input id="login-pass" type="password" autocomplete="new-password">
+      <p class="bad" id="login-error" role="alert" hidden></p>
+      <div class="dialog-actions"><button type="button" id="login-remove">Remove saved login</button><span></span><button type="button" id="login-cancel">Cancel</button><button class="primary" id="login-save">Save</button></div>
+    </form>
+  </dialog>
 
   <section class="card">
     <div class="card-head"><h2>Payments coming up</h2></div>

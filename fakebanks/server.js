@@ -1,15 +1,21 @@
 // Four fake institutions on four ports, each built differently on purpose so
 // the scrapers have to cope with different login flows and data formats.
-//   4701 Harborline Bank   server-rendered pages, password + texted code, paged tables
-//   4702 Kestrel Card      single-page app over a JSON API, "Load more" paging
+//   4701 Harborline Bank   server-rendered pages, password + emailed code, paged tables
+//   4702 Kestrel Card      single-page app over a JSON API, "Load more" paging; a login form that only
+//                          notices a password that was edited, as some carelessly built sites do
 //   4703 Copperleaf Card   server-rendered, "remember this device" step, CSV download
 //   4704 Meridian Wealth   two-step login, JSON API behind the session cookie
 //   4705 Lakeshore Home Loans  password + security question, payment history split into principal/interest/escrow
+//   4706 Demo Mail         the inbox the fake sites email their codes to, with the same feed Gmail offers
 import http from 'node:http';
 import { randomUUID } from 'node:crypto';
 import { buildWorld } from './world.js';
 
 const TTL = 15 * 60_000;
+
+// The made-up inbox. Sites "email" a code by adding to it; nothing is ever really sent.
+const mailbox = [];
+const deliver = (name, email, subject, text) => { mailbox.unshift({ id: randomUUID(), name, email, subject, text, at: new Date().toISOString() }); mailbox.length = Math.min(mailbox.length, 50); };
 const esc = (s) => String(s).replace(/[&<>"]/g, (c) => ({ '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;' }[c]));
 const usd = (n) => (n < 0 ? '-' : '') + '$' + Math.abs(n).toLocaleString('en-US', { minimumFractionDigits: 2, maximumFractionDigits: 2 });
 const mdy = (iso) => `${iso.slice(5, 7)}/${iso.slice(8, 10)}/${iso.slice(0, 4)}`;
@@ -72,19 +78,21 @@ createSite({ port: 4701, name: 'Harborline Bank', color: '#0b4f6c', handler: (c)
     <form method="post" action="/login"><label>Username<input id="username" name="username" autocomplete="username"></label>
     <label>Password<input id="password" name="password" type="password"></label><button id="sign-in">Sign in</button></form>
     <p>Demo login: <code>demo</code> / <code>harbor-demo</code></p></div>`, err ? 401 : 200);
-  const verify = (err = '') => c.html(`<div class="box"><h2>Verify it's you</h2><p>We texted a 6-digit code to (•••) •••-0142.</p>${err && `<p class="err">${err}</p>`}
+  const verify = (err = '') => c.html(`<div class="box"><h2>Verify it's you</h2><p>We emailed a 6-digit code to d•••@mail.example.</p>${err && `<p class="err">${err}</p>`}
     <form method="post" action="/verify"><label>Security code<input id="code" name="code" inputmode="numeric"></label><button id="verify">Continue</button></form>
-    <p>Demo code: <b id="demo-code">482913</b></p></div>`);
+    <p>The demo inbox is at <a href="http://localhost:4706/" target="_blank">localhost:4706</a>.</p></div>`);
   if (path === '/logout') { c.end(); return c.redirect('/login'); }
   if (path === '/login') {
     if (method !== 'POST') return login();
     if (form.username !== 'demo' || form.password !== 'harbor-demo') return login('The username or password is incorrect.');
-    c.start({ stage: 'mfa' }); return c.redirect('/verify');
+    const code = String(Math.floor(100000 + Math.random() * 900000));   // a new code for every sign-in, as real sites do
+    deliver('Harborline Bank', 'alerts@harborline.example', 'Your Harborline security code', `Your security code is ${code}. It expires in 10 minutes. We will never ask you for it by phone.`);
+    c.start({ stage: 'mfa', code }); return c.redirect('/verify');
   }
   if (path === '/verify') {
     if (!session) return c.redirect('/login');
     if (method !== 'POST') return verify();
-    if (form.code !== '482913') return verify('That code is not right. Try again.');
+    if (form.code !== session.code) return verify('That code is not right. Try again.');
     session.stage = 'ok'; return c.redirect('/accounts');
   }
   if (session?.stage !== 'ok') return c.redirect('/login');
@@ -138,8 +146,14 @@ createSite({ port: 4702, name: 'Kestrel Card', color: '#7a2e8e', handler: (c) =>
     return c.html(`<div class="box"><h2>Log in</h2><p class="err" id="error" hidden></p><form id="login-form">
       <label>User ID<input id="user-id" autocomplete="username"></label><label>Password<input id="pass" type="password"></label><button>Log in</button></form>
       <p>Demo login: <code>demo</code> / <code>kestrel-demo</code></p></div>
-      <script>document.getElementById('login-form').addEventListener('submit', async (e) => { e.preventDefault();
-        const r = await fetch('/api/session', { method: 'POST', headers: { 'content-type': 'application/json' }, body: JSON.stringify({ username: document.getElementById('user-id').value, password: document.getElementById('pass').value }) });
+      <script>
+        // Built carelessly on purpose: the form keeps its own copy of the fields, updated only when
+        // the page is told of an edit, and treats a password as entered only after a second edit.
+        const typed = { username: '', password: '' }; let edits = 0;
+        document.getElementById('user-id').addEventListener('input', (e) => { typed.username = e.target.value; });
+        document.getElementById('pass').addEventListener('input', (e) => { if (++edits > 1) typed.password = e.target.value; });
+        document.getElementById('login-form').addEventListener('submit', async (e) => { e.preventDefault();
+        const r = await fetch('/api/session', { method: 'POST', headers: { 'content-type': 'application/json' }, body: JSON.stringify(typed) });
         if (r.ok) location.href = '/'; else { const el = document.getElementById('error'); el.hidden = false; el.textContent = 'We could not log you in.'; } });</script>`);
   }
   if (path === '/') {
@@ -273,6 +287,21 @@ createSite({ port: 4705, name: 'Lakeshore Home Loans', color: '#34495e', handler
       <div class="box"><h2>Payment history</h2><table id="payments"><thead><tr><th>Date</th><th>Reference</th><th class="r">Total paid</th><th class="r">Principal</th><th class="r">Interest</th><th class="r">Escrow</th><th class="r">Balance after</th></tr></thead><tbody>
       ${[...m.tx].reverse().map((t) => `<tr><td>${mdy(t.date)}</td><td>${t.id}</td><td class="r">${usd(t.total)}</td><td class="r">${usd(t.principal)}</td><td class="r">${usd(t.interest)}</td><td class="r">${usd(t.escrow)}</td><td class="r">${usd(t.balanceAfter)}</td></tr>`).join('')}
       </tbody></table></div>`);
+  }
+  return false;
+} });
+
+// ---------- 4706 Demo Mail (where the fake sites email their codes) ----------
+// /mail/u/0/feed/atom has the shape of Gmail's own feed of unread mail, which is what the
+// extension reads to find an emailed code.
+createSite({ port: 4706, name: 'Demo Mail', color: '#5f6368', handler: (c) => {
+  if (c.path === '/mail/u/0/feed/atom') {
+    return c.send(200, 'application/atom+xml; charset=utf-8', `<?xml version="1.0" encoding="UTF-8"?><feed xmlns="http://purl.org/atom/ns#" version="0.3"><title>Gmail - Inbox for demo@mail.example</title><fullcount>${mailbox.length}</fullcount>${
+      mailbox.map((m) => `<entry><title>${esc(m.subject)}</title><summary>${esc(m.text)}</summary><modified>${m.at}</modified><issued>${m.at}</issued><id>${m.id}</id><author><name>${esc(m.name)}</name><email>${esc(m.email)}</email></author></entry>`).join('')}</feed>`);
+  }
+  if (c.path === '/') {
+    return c.html(`<h2>Inbox for demo@mail.example</h2><div class="box"><table><tr><th>From</th><th>Message</th><th>Received</th></tr>${
+      mailbox.map((m) => `<tr><td>${esc(m.name)}</td><td><b>${esc(m.subject)}</b><br>${esc(m.text)}</td><td>${esc(m.at.slice(11, 19))} UTC</td></tr>`).join('') || '<tr><td colspan="3">No mail yet. Sign in to Harborline Bank and its code arrives here.</td></tr>'}</table></div>`);
   }
   return false;
 } });

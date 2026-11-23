@@ -8,6 +8,7 @@ import { compareWithLastTime } from './checks.js';
 import { BANKS } from './banks/index.js';
 import { runSync, state } from './sync.js';
 import { getInsights } from './insights.js';
+import { saveLogin, removeLogin, getLogin, loginSavedAt, storeName, getSettings, saveSettings, codesInbox } from './logins.js';
 
 const PORT = Number(process.env.PORT) || (DEMO ? 4690 : 4680); // demo and real can run side by side
 const HOST = '127.0.0.1'; // never expose financial data beyond this machine
@@ -77,16 +78,36 @@ const server = http.createServer(async (req, res) => {
     }
     // ---- the bridge (see bridge.js) ----
     if (url.pathname.startsWith('/ext/') && req.headers['x-coincell'] !== '1') return json(res, 403, { error: 'Forbidden' });   // pages cannot send this header
-    if (route === 'GET /ext/poll') return poll(res, url.searchParams.get('sites')?.split(',').filter(Boolean), (cmd) => json(res, 200, cmd));
+    if (route === 'GET /ext/poll') return poll(res, url.searchParams.get('sites')?.split(',').filter(Boolean), url.searchParams.get('signin')?.split(',').filter(Boolean), (cmd) => json(res, 200, cmd));
     if (route === 'POST /ext/progress') {
       const { site, state: s, message, warnings } = await readBody(req);
       if (BANKS.some((b) => b.id === site)) setProgress(site, s, message, warnings);
       return json(res, 200, { ok: true });
     }
+    // The extension asks for a saved login when it is on that institution's own sign-in page.
+    // This is the only route that returns a password.
+    if (route === 'GET /ext/login') {
+      const site = url.searchParams.get('site');
+      if (!BANKS.some((b) => b.id === site)) return json(res, 400, { error: 'Unknown institution' });
+      const login = getLogin(site);
+      return json(res, 200, login ? { ...login, inbox: codesInbox() } : { saved: false });
+    }
+    if (route === 'POST /api/logins') {
+      const { site, username, password, remove } = await readBody(req);
+      if (!BANKS.some((b) => b.id === site)) return json(res, 400, { error: 'Unknown institution' });
+      if (remove) removeLogin(site); else saveLogin(site, username, password);
+      return json(res, 200, { ok: true });
+    }
+    if (route === 'POST /api/settings') {
+      const { codesInbox: address } = await readBody(req);
+      if (address && !/^[^@\s]+@[^@\s]+$/.test(address)) return json(res, 400, { error: 'That does not look like an email address' });
+      saveSettings({ codesInbox: String(address ?? '').trim() });
+      return json(res, 200, { ok: true });
+    }
     if (route === 'GET /api/status') {
       const { asOf, last } = getImports(), ext = extension();
-      return json(res, 200, { extension: ext.connected, active: active() || state.running,
-        institutions: BANKS.map((b) => ({ id: b.id, name: b.name, asOf: asOf.get(b.id) ?? null, last: last.get(b.id) ?? null, progress: progressBy[b.id] ?? null,
+      return json(res, 200, { extension: ext.connected, active: active() || state.running, loginStore: storeName, codesInbox: DEMO ? codesInbox().address : getSettings().codesInbox ?? '',
+        institutions: BANKS.map((b) => ({ id: b.id, name: b.name, asOf: asOf.get(b.id) ?? null, last: last.get(b.id) ?? null, progress: progressBy[b.id] ?? null, canSignIn: ext.signIn.includes(b.id), loginSavedAt: ext.signIn.includes(b.id) ? loginSavedAt(b.id) : null,
           readBy: ext.sites.includes(b.id) || b.viaExtension ? 'extension' : b.needsBrowser ? 'browser' : 'file' })) });
     }
     if (route === 'POST /api/refresh') {

@@ -12,7 +12,8 @@
     "demo": "node scripts/demo.js",
     "demo:sync": "COINCELL_DEMO=1 node src/sync.js all",
     "demo:verify": "node scripts/verify-fake.js",
-    "demo:test-extension": "node scripts/test-extension.js"
+    "demo:test-extension": "node scripts/test-extension.js",
+    "service": "sh scripts/service.sh"
   },
   "engines": {
     "node": ">=22.5"

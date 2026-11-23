@@ -19,8 +19,8 @@ export default {
       await page.waitForURL(/\/(verify|accounts)/);
     }
     if (page.url().includes('/verify')) {
-      log('Entering texted security code');
-      await page.fill('#code', await page.locator('#demo-code').innerText());
+      log('Entering the emailed security code');
+      await page.fill('#code', (await (await fetch('http://localhost:4706/mail/u/0/feed/atom')).text()).match(/security code is (\d{6})/)[1]);   // the newest mail in the demo inbox
       await page.click('#verify');
     }
     await page.waitForSelector('.acct');

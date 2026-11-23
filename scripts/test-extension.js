@@ -40,8 +40,8 @@ try {
 
   // Log in to each site the way a person would.
   const logins = {
-    4701: async (t) => { await t.fill('#username', 'demo'); await t.fill('#password', 'harbor-demo'); await t.click('#sign-in'); await t.fill('#code', await t.locator('#demo-code').innerText()); await t.click('#verify'); await t.waitForSelector('.acct'); },
-    4702: async (t) => { await t.fill('#user-id', 'demo'); await t.fill('#pass', 'kestrel-demo'); await t.click('#login-form button'); await t.waitForSelector('#card-summary'); },
+    4701: async (t) => { await t.fill('#username', 'demo'); await t.fill('#password', 'harbor-demo'); await t.click('#sign-in'); await t.fill('#code', (await (await fetch('http://localhost:4706/mail/u/0/feed/atom')).text()).match(/security code is (\d{6})/)[1]); await t.click('#verify'); await t.waitForSelector('.acct'); },
+    4702: async (t) => { await t.fill('#user-id', 'demo'); await t.locator('#pass').pressSequentially('kestrel-demo'); await t.click('#login-form button'); await t.waitForSelector('#card-summary'); },
     4703: async (t) => { await t.fill('input[name="userId"]', 'demo'); await t.fill('input[name="passcode"]', 'copper-demo'); await t.click('button[type="submit"]'); await t.click('#not-now'); await t.waitForSelector('[data-field="current-balance"]'); },
     4704: async (t) => { await t.fill('#username', 'demo'); await t.click('#next'); await t.fill('#password', 'meridian-demo'); await t.click('#log-in'); await t.waitForSelector('#portfolio'); },
     4705: async (t) => { await t.fill('#user', 'demo'); await t.fill('#pw', 'lakeshore-demo'); await t.click('#signin'); await t.fill('#answer', await t.locator('#demo-answer').innerText()); await t.click('#continue'); await t.waitForSelector('#loan-summary'); },
@@ -91,6 +91,42 @@ try {
   await tabs[4703].goto('http://localhost:4703/login'); await logins[4703](tabs[4703]);
   st = await until('the sync that follows a login', (s) => s.institutions.find((i) => i.id === 'copperleaf').progress?.state === 'done', 60_000);
   console.log('after login ->', states(st));
+
+  // Saved logins: with every site logged out, a refresh signs in by itself where it can.
+  //   Harborline emails a code, Kestrel's form only notices an edited password, Copperleaf asks to
+  //   remember the device, Meridian asks for the username and password on separate pages, and
+  //   Lakeshore asks a security question, which nothing here can answer.
+  const passwords = { harborline: 'harbor-demo', kestrel: 'kestrel-demo', copperleaf: 'copper-demo', meridian: 'meridian-demo', lakeshore: 'lakeshore-demo' };
+  const one = (s, id) => s.institutions.find((i) => i.id === id);
+  const settledAll = (s) => !s.active && s.institutions.filter((i) => i.readBy === 'extension').every((i) => ['done', 'needs-login', 'failed'].includes(i.progress?.state));
+  for (const [site, password] of Object.entries(passwords)) await dash('/api/logins', { site, username: 'demo', password });
+  for (const port of Object.keys(logins)) await tabs[port].goto(`http://localhost:${port}/logout`);
+  await new Promise((r) => setTimeout(r, 1000));
+  await dash('/api/refresh', { bank: 'all' });
+  await until('the first progress', (s) => s.active, 10_000);
+  st = await until('the refresh that signs in', settledAll, 150_000);
+  console.log('signs in    ->', states(st));
+  for (const id of ['harborline', 'kestrel', 'copperleaf', 'meridian']) if (one(st, id).progress.state !== 'done') fail(`${id} should have been signed in to and read: ${one(st, id).progress.message}`);
+  if (one(st, 'lakeshore').progress.state !== 'needs-login' || !/cannot answer/.test(one(st, 'lakeshore').progress.message)) fail(`a security question should be left to the user: ${one(st, 'lakeshore').progress.message}`);
+  else console.log('signs in    -> lakeshore:', one(st, 'lakeshore').progress.message);
+
+  // A login the site turns down is tried once, never twice.
+  await dash('/api/logins', { site: 'harborline', username: 'demo', password: 'not-the-password' });
+  await tabs[4701].goto('http://localhost:4701/logout');
+  for (const expected of [/did not accept the saved login/, /not tried again/]) {
+    await dash('/api/refresh', { bank: 'harborline' });
+    await until('the first progress', (s) => s.active, 10_000);
+    st = await until('the refused login', (s) => !s.active && one(s, 'harborline').progress?.state !== 'done', 90_000);
+    console.log('wrong login ->', one(st, 'harborline').progress.message);
+    if (!expected.test(one(st, 'harborline').progress.message)) fail('a refused login should be reported, and not tried a second time');
+  }
+  // The password leaves coincell only for the extension: not in the status, and not without the header pages cannot send.
+  const statusText = JSON.stringify(await dash('/api/status'));
+  if (Object.values(passwords).some((pw) => statusText.includes(pw)) || statusText.includes('not-the-password')) fail('the status must never contain a password');
+  if ((await fetch('http://localhost:4690/ext/login?site=kestrel')).status !== 403) fail('a saved login must not be readable by a web page');
+  else console.log('saved login -> not in the status, and refused to anything that is not the extension');
+  await dash('/api/logins', { site: 'harborline', remove: true });
+  await tabs[4701].goto('http://localhost:4701/login'); await logins[4701](tabs[4701]);
 
   // A site that changed: send Meridian again with an account, the holdings and the transactions gone.
   const thin = await (await fetch('http://localhost:4690/api/import', { method: 'POST', headers: { 'content-type': 'application/json', 'x-coincell': '1' },

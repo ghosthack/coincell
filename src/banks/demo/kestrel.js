@@ -14,7 +14,7 @@ export default {
       if (await page.locator('#login-form').count()) {
         log('Signing in');
         await page.fill('#user-id', 'demo');
-        await page.fill('#pass', 'kestrel-demo');
+        await page.locator('#pass').pressSequentially('kestrel-demo');   // key by key: this site ignores a password set in one go
         await page.click('#login-form button');
         await page.waitForSelector('#card-summary');
       }

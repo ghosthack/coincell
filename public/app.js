@@ -262,8 +262,12 @@ function showStanding(st) {
     { label: 'Read through', get: (r) => READ_BY[r.readBy], cls: 'muted' },
     { label: 'Data as of', get: (r) => (r.asOf ? fmtDate(r.asOf, { month: 'short', day: 'numeric' }) : '–'), cls: 'muted' },
     { label: 'Last refresh', get: standing, cls: 'wrap' },
+    { label: 'Saved login', get: (r) => (r.canSignIn ? el('button', { class: 'small', 'data-login': r.id }, r.loginSavedAt ? 'Saved · change' : 'Save a login…') : el('span', { class: 'muted' }, '–')) },
     { label: '', num: true, get: (r) => { const b = el('button', { class: 'small', 'data-bank': r.id }, 'Refresh'); b.disabled = ['queued', 'working'].includes(r.progress?.state); return b; } },
   ], st.institutions, 'No institutions yet.');
+  latest = st;
+  $('inbox-form').hidden = !st.institutions.some((i) => i.canSignIn);
+  if (document.activeElement !== $('inbox') && !$('inbox').dataset.edited) $('inbox').value = st.codesInbox;
   const busy = st.institutions.filter((i) => ['queued', 'working'].includes(i.progress?.state)).length;
   const login = st.institutions.filter((i) => i.progress?.state === 'needs-login').map((i) => i.name);
   const stale = st.institutions.map((i) => i.last?.at).filter(Boolean).sort()[0];
@@ -283,7 +287,33 @@ async function refresh(bank) {
   try { await post('/api/refresh', { bank }); showStanding(await api('/api/status')); } catch (e) { $('status').textContent = e.message; $('refresh').disabled = false; }
 }
 $('refresh').addEventListener('click', () => refresh('all'));
-$('institutions').addEventListener('click', (e) => { if (e.target.dataset.bank) refresh(e.target.dataset.bank); });
+$('institutions').addEventListener('click', (e) => { if (e.target.dataset.bank) refresh(e.target.dataset.bank); if (e.target.dataset.login) askLogin(e.target.dataset.login); });
+
+// ---------- saved logins ----------
+// A login typed here goes to coincell on this computer and from there only to the extension, to be
+// filled in on that institution's own sign-in page. It is never shown again, here or anywhere.
+let latest = null, loginFor = null;
+function askLogin(id) {
+  const inst = latest.institutions.find((i) => i.id === id);
+  loginFor = id;
+  $('login-title').textContent = `Login for ${inst.name}`;
+  $('login-note').textContent = `Kept in ${latest.loginStore}${inst.loginSavedAt ? `. One was saved ${ago(inst.loginSavedAt)}; saving replaces it.` : '.'}`;
+  $('login-user').value = ''; $('login-pass').value = ''; $('login-error').hidden = true;
+  $('login-remove').hidden = !inst.loginSavedAt;
+  $('login-dialog').showModal();
+}
+async function sendLogin(body) {
+  try { await post('/api/logins', { site: loginFor, ...body }); $('login-pass').value = ''; $('login-dialog').close(); showStanding(await api('/api/status')); }
+  catch (e) { $('login-error').textContent = e.message; $('login-error').hidden = false; }
+}
+$('login-form').addEventListener('submit', (e) => { e.preventDefault(); sendLogin({ username: $('login-user').value.trim(), password: $('login-pass').value }); });
+$('login-remove').addEventListener('click', () => sendLogin({ remove: true }));
+$('login-cancel').addEventListener('click', () => { $('login-pass').value = ''; $('login-dialog').close(); });
+$('inbox').addEventListener('input', () => { $('inbox').dataset.edited = '1'; });
+$('inbox-form').addEventListener('submit', async (e) => {
+  e.preventDefault();
+  try { await post('/api/settings', { codesInbox: $('inbox').value.trim() }); delete $('inbox').dataset.edited; $('inbox-note').textContent = 'Saved.'; } catch (err) { $('inbox-note').textContent = err.message; }
+});
 $('range').addEventListener('click', (e) => { if (e.target.dataset.days != null) setRange(Number(e.target.dataset.days)); });
 $('txn-account').addEventListener('change', loadTransactions);
 const setMode = (mode) => { nwMode = mode; localStorage.setItem('nwMode', mode); for (const b of $('nw-mode').children) b.setAttribute('aria-pressed', String(b.dataset.mode === mode)); drawChart(); };

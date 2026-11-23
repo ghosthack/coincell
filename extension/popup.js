@@ -1,4 +1,4 @@
-import { siteFor } from './sites.js';
+import { SITES, siteFor } from './sites.js';
 
 const $ = (id) => document.getElementById(id);
 $('version').textContent = `coincell extension ${chrome.runtime.getManifest().version}`;
@@ -38,6 +38,12 @@ $('send').addEventListener('click', async () => {
   run($('send'), { type: 'send', tabId: tab.id });
 });
 $('send-all').addEventListener('click', () => run($('send-all'), { type: 'send-all' }));
+
+// Signing in with saved logins needs Chrome's leave for each site's sign-in pages, and for Gmail's feed of unread mail.
+const needed = [...new Set([...SITES.filter((s) => s.target === 'real' && s.signIn).flatMap((s) => [...(s.home ? [`${new URL(s.home).origin}/*`] : []), ...(s.allow ?? [])]), 'https://mail.google.com/*'])];
+const paintAllow = async () => { if (await chrome.permissions.contains({ origins: needed })) { $('allow').disabled = true; $('allow').textContent = 'Sign-in help is allowed'; } };
+paintAllow();
+$('allow').addEventListener('click', async () => { await chrome.permissions.request({ origins: needed }); paintAllow(); });
 
 let recording = Boolean(origin && ((await chrome.storage.local.get('recording')).recording ?? {})[origin]);
 const paint = () => {

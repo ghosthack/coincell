@@ -1,5 +1,6 @@
 // Runs the site scripts in your tabs and hands what they collect to coincell on this computer.
 import { SITES, TARGETS, siteFor, targetFor } from './sites.js';
+import { signIn } from './signin.js';
 
 async function post(base, path, body) {
   let res;
@@ -197,7 +198,12 @@ async function refreshOne(site) {
       opened = true;
       await chrome.storage.session.set({ mine: { ...mine, [key]: site.loggedIn.test(tab.url ?? '') ? undefined : tab.id } });
     }
-    if (!site.loggedIn.test(tab.url ?? '')) return void await awaitLogin(opened ? 'Log in to this site in the tab that was opened; it will be read as soon as you are in' : 'Log in to this site');
+    if (!site.loggedIn.test(tab.url ?? '')) {
+      // With a login saved in coincell, sign in with it (see signin.js); otherwise it is yours to do.
+      const signed = await signIn(site, tab, (message) => say(site, 'working', message));
+      if (!signed.ok) return void await awaitLogin(signed.message ?? (opened ? 'Log in to this site in the tab that was opened; it will be read as soon as you are in' : 'Log in to this site'));
+      tab = await settled(tab.id);
+    }
     await say(site, 'working', 'Reading');
     const r = await sendSite(tab);
     if (r.ok) {
@@ -221,7 +227,8 @@ async function listen(name) {
   const ids = [...new Set(SITES.filter((s) => s.target === name && s.loggedIn).map((s) => s.id))];
   try {
     for (;;) {
-      const res = await fetch(`${TARGETS[name]}/ext/poll?sites=${ids.join(',')}`, { headers: { 'x-coincell': '1' } }).catch(() => null);
+      const canSignIn = [...new Set(SITES.filter((s) => s.target === name && s.signIn).map((s) => s.id))];
+      const res = await fetch(`${TARGETS[name]}/ext/poll?sites=${ids.join(',')}&signin=${canSignIn.join(',')}`, { headers: { 'x-coincell': '1' } }).catch(() => null);
       if (!res?.ok) break;   // coincell is not running there; the alarm below tries again
       const cmd = await res.json().catch(() => ({}));
       if (cmd.type === 'refresh') (async () => { for (const id of cmd.sites) { const site = SITES.find((s) => s.id === id && s.target === name && s.loggedIn); if (site) await refreshOne(site); } })();
