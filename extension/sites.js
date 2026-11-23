@@ -26,7 +26,7 @@ const sender = (domain) => ({ from: new RegExp(`@([a-z0-9-]+\\.)*${domain.replac
 export const SITES = [
   { id: 'fidelity', name: 'Fidelity', match: /^https:\/\/digital\.fidelity\.com\//, capture: fidelity, target: 'real',
     home: 'https://digital.fidelity.com/ftgw/digital/portfolio/summary', loggedIn: /^https:\/\/digital\.fidelity\.com\/ftgw\/digital\/portfolio\//,
-    signIn: /^https:\/\/digital\.fidelity\.com\/prgw\/digital\/login\//, code: sender('fidelity.com') },
+    signIn: /^https:\/\/(digital|login)\.fidelity\.com\//, code: sender('fidelity.com') },
   { id: 'chase', name: 'Chase', match: /^https:\/\/secure\.chase\.com\//, capture: chase, target: 'real',
     home: 'https://secure.chase.com/web/auth/dashboard#/dashboard/overview', loggedIn: /^https:\/\/secure\.chase\.com\/web\/auth\/dashboard#\/dashboard\//,
     signIn: /^https:\/\/secure\.chase\.com\/web\/auth\//, code: sender('chase.com') },
