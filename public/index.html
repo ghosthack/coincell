@@ -124,7 +124,7 @@
       <h1>Net worth</h1>
       <div class="hero" id="networth">–</div>
       <div class="sub" id="change">&nbsp;</div>
-      <div class="seg" id="tabs" role="tablist" style="margin-top:12px"><button data-tab="overview" aria-pressed="true">Overview</button><button data-tab="insights" aria-pressed="false">Insights</button></div>
+      <div class="seg" id="tabs" role="tablist" style="margin-top:12px"><button data-tab="overview" aria-pressed="true">Overview</button><button data-tab="insights" aria-pressed="false">Insights</button><button data-tab="settings" aria-pressed="false">Settings</button></div>
     </div>
     <div class="sync">
       <div class="controls">
@@ -155,23 +155,8 @@
   <section class="card">
     <div class="card-head"><h2>Institutions</h2><span class="sub" id="ext-note"></span></div>
     <div class="scroll" id="institutions"></div>
-    <form class="foot inline-form" id="inbox-form" hidden>
-      <label for="inbox">Inbox that sign-in codes are emailed to</label>
-      <input id="inbox" type="email" placeholder="name@gmail.com" autocomplete="off" spellcheck="false">
-      <button class="small">Save</button><span class="muted" id="inbox-note"></span>
-    </form>
   </section>
 
-  <dialog id="login-dialog">
-    <form method="dialog" id="login-form">
-      <h2 id="login-title">Saved login</h2>
-      <p class="muted" id="login-note"></p>
-      <label for="login-user">Username</label><input id="login-user" autocomplete="off" spellcheck="false" autocapitalize="off">
-      <label for="login-pass">Password</label><input id="login-pass" type="password" autocomplete="new-password">
-      <p class="bad" id="login-error" role="alert" hidden></p>
-      <div class="dialog-actions"><button type="button" id="login-remove">Remove saved login</button><span></span><button type="button" id="login-cancel">Cancel</button><button class="primary" id="login-save">Save</button></div>
-    </form>
-  </dialog>
 
   <section class="card">
     <div class="card-head"><h2>Accounts</h2></div>
@@ -200,6 +185,19 @@
       <select id="txn-account" aria-label="Filter transactions by account"><option value="">All accounts</option></select>
     </div>
     <div class="scroll" id="transactions"></div>
+  </section>
+  </div>
+
+  <div class="tab" id="tab-settings" hidden>
+  <section class="card">
+    <div class="card-head"><h2>Signing in for you</h2><span class="sub" id="store-note"></span></div>
+    <p class="foot" style="margin:0 0 10px">With a login saved here, a refresh that finds a site logged out signs in by itself, on that site's own sign-in page.</p>
+    <div class="scroll" id="logins"></div>
+    <form class="foot inline-form" id="inbox-form">
+      <label for="inbox" title="All sign-in codes should arrive in one Gmail inbox, signed in to in the same Chrome as the extension. This is that inbox, not the email address on each account. Leave it empty if that Chrome is signed in to only one Gmail account.">Gmail inbox the sign-in codes arrive in (optional)</label>
+      <input id="inbox" type="email" placeholder="the only Gmail signed in" autocomplete="off" spellcheck="false">
+      <button class="small">Save</button><span class="muted" id="inbox-note"></span>
+    </form>
   </section>
   </div>
 
@@ -281,6 +279,16 @@
   </section>
   </div>
 </main>
+<dialog id="login-dialog">
+  <form method="dialog" id="login-form">
+    <h2 id="login-title">Saved login</h2>
+    <p class="muted" id="login-note"></p>
+    <label for="login-user">Username</label><input id="login-user" autocomplete="off" spellcheck="false" autocapitalize="off">
+    <label for="login-pass">Password</label><input id="login-pass" type="password" autocomplete="new-password">
+    <p class="bad" id="login-error" role="alert" hidden></p>
+    <div class="dialog-actions"><button type="button" id="login-remove">Remove saved login</button><span></span><button type="button" id="login-cancel">Cancel</button><button class="primary" id="login-save">Save</button></div>
+  </form>
+</dialog>
 <script src="app.js"></script>
 <script src="charts.js"></script>
 <script src="insights.js"></script>

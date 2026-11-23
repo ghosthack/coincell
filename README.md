@@ -60,10 +60,10 @@ press (the popup has a switch for this). The Institutions table on the dashboard
 Sessions at banks run out within the hour, so a refresh usually finds a login page. coincell can sign in itself:
 
 1. Run coincell as a login item with `npm run service`, so the macOS Keychain is available to it.
-2. In the dashboard's Institutions table, press **Save a login…** for each institution. The login is kept in the
+2. On the dashboard's **Settings** tab, press **Save a login…** for each institution. The login is kept in the
    macOS Keychain (service `coincell`) and never in this folder.
-3. If a site emails sign-in codes, have them sent to one Gmail inbox, sign in to that inbox in the same Chrome,
-   and name it under the table.
+3. If a site emails sign-in codes, have them all arrive in one Gmail inbox and sign in to that inbox in the same
+   Chrome. If that Chrome is signed in to several Gmail accounts, name the inbox on the Settings tab.
 4. Press **Allow sign-in help** in the extension's popup. Chrome asks you to confirm.
 
 From then on a refresh fills the saved login in on the site's own sign-in page, enters an emailed code, and

@@ -262,11 +262,16 @@ function showStanding(st) {
     { label: 'Read through', get: (r) => READ_BY[r.readBy], cls: 'muted' },
     { label: 'Data as of', get: (r) => (r.asOf ? fmtDate(r.asOf, { month: 'short', day: 'numeric' }) : '–'), cls: 'muted' },
     { label: 'Last refresh', get: standing, cls: 'wrap' },
-    { label: 'Saved login', get: (r) => (r.canSignIn ? el('button', { class: 'small', 'data-login': r.id }, r.loginSavedAt ? 'Saved · change' : 'Save a login…') : el('span', { class: 'muted' }, '–')) },
     { label: '', num: true, get: (r) => { const b = el('button', { class: 'small', 'data-bank': r.id }, 'Refresh'); b.disabled = ['queued', 'working'].includes(r.progress?.state); return b; } },
   ], st.institutions, 'No institutions yet.');
   latest = st;
-  $('inbox-form').hidden = !st.institutions.some((i) => i.canSignIn);
+  // Settings: one row per institution the extension can sign in to.
+  table($('logins'), [
+    { label: 'Institution', get: (r) => r.name },
+    { label: 'Saved login', get: (r) => (r.loginSavedAt ? `Saved ${ago(r.loginSavedAt)}` : 'None'), cls: 'muted' },
+    { label: '', num: true, get: (r) => el('button', { class: 'small', 'data-login': r.id }, r.loginSavedAt ? 'Change' : 'Save a login…') },
+  ], st.institutions.filter((i) => i.canSignIn), st.extension ? 'The extension cannot sign in to any of your institutions yet.' : 'Open Chrome with the coincell extension loaded to set this up.');
+  $('store-note').textContent = `Logins are kept in ${st.loginStore}.`;
   if (document.activeElement !== $('inbox') && !$('inbox').dataset.edited) $('inbox').value = st.codesInbox;
   const busy = st.institutions.filter((i) => ['queued', 'working'].includes(i.progress?.state)).length;
   const login = st.institutions.filter((i) => i.progress?.state === 'needs-login').map((i) => i.name);
@@ -287,7 +292,8 @@ async function refresh(bank) {
   try { await post('/api/refresh', { bank }); showStanding(await api('/api/status')); } catch (e) { $('status').textContent = e.message; $('refresh').disabled = false; }
 }
 $('refresh').addEventListener('click', () => refresh('all'));
-$('institutions').addEventListener('click', (e) => { if (e.target.dataset.bank) refresh(e.target.dataset.bank); if (e.target.dataset.login) askLogin(e.target.dataset.login); });
+$('institutions').addEventListener('click', (e) => { if (e.target.dataset.bank) refresh(e.target.dataset.bank); });
+$('logins').addEventListener('click', (e) => { if (e.target.dataset.login) askLogin(e.target.dataset.login); });
 
 // ---------- saved logins ----------
 // A login typed here goes to coincell on this computer and from there only to the extension, to be

@@ -88,7 +88,7 @@ async function readInbox(inbox) {
 async function emailedCode(site, inbox, since) {
   for (const end = Date.now() + 120_000; Date.now() < end; await sleep(4000)) {
     const mail = await readInbox(inbox);
-    if (!mail) return { message: `The inbox for emailed codes (${inbox.address}) could not be read. Sign in to it in this Chrome, and press "Allow sign-in help" in the extension's popup.` };
+    if (!mail) return { message: `The Gmail inbox for emailed codes${inbox.address ? ` (${inbox.address})` : ''} could not be read. Sign in to it in this Chrome, and press "Allow sign-in help" in the extension's popup.` };
     const found = mail.filter((m) => site.code.from.test(m.from) && m.at >= since - 15_000).sort((a, b) => b.at - a.at)
       .map((m) => (site.code.pattern ?? /\b\d{6,8}\b/).exec(m.text)?.[0]).find(Boolean);
     if (found) return { code: found };

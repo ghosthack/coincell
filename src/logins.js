@@ -59,7 +59,8 @@ export const saveSettings = (patch) => { const next = { ...getSettings(), ...pat
 export function codesInbox() {
   if (DEMO) return { address: 'demo@mail.example', feeds: ['http://localhost:4706/mail/u/0/feed/atom'] };
   const address = String(getSettings().codesInbox ?? '').trim().toLowerCase();
-  if (!/^[^@\s]+@[^@\s]+$/.test(address)) return null;
-  // Gmail numbers the accounts you are signed in to; the extension picks the one whose feed names this address.
+  // Gmail numbers the accounts a browser is signed in to. With an inbox named, the extension picks
+  // the one whose feed names that address; with none named, it uses the first.
+  if (!/^[^@\s]+@[^@\s]+$/.test(address)) return { address: '', feeds: ['https://mail.google.com/mail/u/0/feed/atom'] };
   return { address, feeds: [0, 1, 2, 3, 4].map((n) => `https://mail.google.com/mail/u/${n}/feed/atom`) };
 }

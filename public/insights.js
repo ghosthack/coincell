@@ -135,5 +135,6 @@ $('tabs').addEventListener('click', (e) => {
   for (const b of $('tabs').children) b.setAttribute('aria-pressed', String(b.dataset.tab === tab));
   $('tab-overview').hidden = tab !== 'overview';
   $('tab-insights').hidden = tab !== 'insights';
+  $('tab-settings').hidden = tab !== 'settings';
   if (tab === 'overview') drawChart(); else window.redrawCharts();
 });
