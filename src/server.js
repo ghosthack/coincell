@@ -1,7 +1,7 @@
 import http from 'node:http';
 import fs from 'node:fs';
 import path from 'node:path';
-import { PUBLIC_DIR, DEMO, dataPath } from './paths.js';
+import { PUBLIC_DIR, DEMO, ROOT, dataPath } from './paths.js';
 import { getAccounts, getNetWorth, getNetWorthByType, getHistoryNote, getHoldings, getTransactions, getCashflow, saveSnapshot, linkTransfers, removeAccounts, bankSummary, recordImport, getImports } from './db.js';
 import { poll, command, extension, active, progressBy, setProgress, nextRun } from './bridge.js';
 import { compareWithLastTime } from './checks.js';
@@ -24,6 +24,10 @@ const readBody = (req) => new Promise((resolve, reject) => {
   req.on('end', () => { try { resolve(s ? JSON.parse(s) : {}); } catch (e) { reject(e); } });
   req.on('error', reject);
 });
+
+// The version of the extension in this folder. An extension loaded from here that is running an
+// older one reloads itself, since Chrome does not pick up changed files by itself.
+const extensionOnDisk = () => { try { return JSON.parse(fs.readFileSync(path.join(ROOT, 'extension', 'manifest.json'), 'utf8')).version; } catch { return null; } };
 
 const server = http.createServer(async (req, res) => {
   try {
@@ -78,7 +82,7 @@ const server = http.createServer(async (req, res) => {
     }
     // ---- the bridge (see bridge.js) ----
     if (url.pathname.startsWith('/ext/') && req.headers['x-coincell'] !== '1') return json(res, 403, { error: 'Forbidden' });   // pages cannot send this header
-    if (route === 'GET /ext/poll') return poll(res, url.searchParams.get('sites')?.split(',').filter(Boolean), url.searchParams.get('signin')?.split(',').filter(Boolean), url.searchParams.get('v'), (cmd) => json(res, 200, cmd));
+    if (route === 'GET /ext/poll') return poll(res, url.searchParams.get('sites')?.split(',').filter(Boolean), url.searchParams.get('signin')?.split(',').filter(Boolean), url.searchParams.get('v'), (cmd) => json(res, 200, { ...cmd, want: extensionOnDisk() }));
     if (route === 'POST /ext/progress') {
       const { site, state: s, message, warnings } = await readBody(req);
       if (BANKS.some((b) => b.id === site)) setProgress(site, s, message, warnings);

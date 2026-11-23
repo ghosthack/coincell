@@ -243,6 +243,13 @@ async function listen(name) {
       const res = await fetch(`${TARGETS[name]}/ext/poll?sites=${ids.join(',')}&signin=${canSignIn.join(',')}&v=${chrome.runtime.getManifest().version}`, { headers: { 'x-coincell': '1' } }).catch(() => null);
       if (!res?.ok) break;   // coincell is not running there; the alarm below tries again
       const cmd = await res.json().catch(() => ({}));
+      // coincell says which version of this extension is in its folder. If that is not the one
+      // running, the files changed: load them. At most once per version, so a mismatch cannot loop.
+      const mine = chrome.runtime.getManifest().version;
+      if (cmd.want && cmd.want !== mine && !busy.size) {
+        const { reloadedFor } = await chrome.storage.local.get('reloadedFor');
+        if (reloadedFor !== `${mine}>${cmd.want}`) { await chrome.storage.local.set({ reloadedFor: `${mine}>${cmd.want}` }); return chrome.runtime.reload(); }
+      }
       if (cmd.type === 'refresh') (async () => { for (const id of cmd.sites) { const site = SITES.find((s) => s.id === id && s.target === name && s.loggedIn); if (site) await refreshOne(site); } })();
     }
   } finally {
