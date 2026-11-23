@@ -119,9 +119,12 @@ function onPage(step, data) {
   };
   const send = (el) => {
     el.blur();
-    const inForm = el.form ? buttons(el.form).filter((b) => b.type === 'submit') : [];
-    const named = buttons(el.form ?? document).find((b) => /^(sign|log) ?(in|on)|^continue|^next|^submit|^verify|^confirm/i.test(label(b)));
-    const button = inForm[0] ?? named;
+    // The button that says what it does comes first; failing that, the form's own submit button, but never
+    // one of the helpers that sit beside a password field (show, forgot, passwordless, register).
+    const helper = (b) => /show|hide|forgot|passwordless|passkey|register|activate|enroll|sign up|español/i.test(label(b));
+    const named = buttons(el.form ?? document).find((b) => !helper(b) && /^(sign|log) ?(in|on)\b|^continue|^next|^submit|^verify|^confirm/i.test(label(b)));
+    const inForm = el.form ? buttons(el.form).filter((b) => b.type === 'submit' && !helper(b)) : [];
+    const button = named ?? inForm[0];
     if (button) button.click(); else el.form?.requestSubmit();
   };
   if (step === 'user' && user) { put(user, data.username); if (data.nudge !== false) nudge(user); send(user); }
