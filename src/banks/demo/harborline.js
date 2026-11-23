@@ -17,6 +17,7 @@ export default {
       await page.fill('#password', 'harbor-demo');
       await page.click('#sign-in');
       await page.waitForURL(/\/(verify|accounts)/);
+      if (page.url().includes('/verify/how')) { await page.check('input[value="email"]'); await page.click('#how-next'); await page.waitForURL(/\/verify$/); }   // ask for the code by email
     }
     if (page.url().includes('/verify')) {
       log('Entering the emailed security code');

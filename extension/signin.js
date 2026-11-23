@@ -47,7 +47,21 @@ function onPage(step, data) {
   }
   // A page offering to send an approval to the site's phone app.
   const push = pass || code || user ? null : buttons(document).find((b) => /^send (a |the )?(push )?notification/i.test(label(b)));
-  if (step === 'look') return { has: pass ? 'password' : code ? 'code' : user ? 'user' : push ? 'push' : remember ? 'remember' : 'none', url: location.href };
+  // A page asking how to reach you for the second step: a set of choices and a button to go on.
+  // The order of preference is what needs least of you: an emailed code (coincell reads it), then
+  // whatever leads to more choices, then a tap in the site's phone app, then a texted code.
+  const options = pass || code || user || push ? [] : [...document.querySelectorAll('input[type=radio]')].map((r) => ({ r, face: shown(r) ? r : [...(r.labels ?? [])].find(shown2), text: words(r) })).filter((o) => o.face);
+  const KINDS = [['email', /e-?mail|@/i], ['more', /different way|another way|other (way|option|method)/i], ['push', /notification|push|\bapp\b/i], ['text', /\btext\b|sms/i]];
+  const choice = options.length >= 2 ? KINDS.map(([kind, re]) => ({ kind, o: options.find((o) => re.test(o.text)) })).find((c) => c.o) : null;
+  if (step === 'look') return { has: pass ? 'password' : code ? 'code' : user ? 'user' : push ? 'push' : choice ? 'choose' : remember ? 'remember' : 'none', url: location.href,
+    sig: choice ? options.map((o) => o.text.replace(/\d/g, '9').slice(0, 30)).join('|') : '' };
+  if (step === 'choose' && choice) {
+    tickRemember();
+    choice.o.face.click(); if (!choice.o.r.checked) choice.o.r.click();
+    const next = buttons(document).find((b) => /^(next|continue|send|submit|confirm)/i.test(label(b)));
+    if (next) next.click();
+    return { picked: choice.kind };
+  }
 
   const told = (el, inputType, text) => el.dispatchEvent(new InputEvent('input', { bubbles: true, inputType, data: text ?? null }));
   // In a tab you are not looking at, the browser holds back the "focus" notice, so the page is told directly.
@@ -158,7 +172,7 @@ export async function signIn(site, tab, say, { whateverTheAddress = false } = {}
         .map((r) => ({ frameId: r.frameId, ...r.result })).filter((f) => f.has && f.has !== 'none' && (f.frameId === 0 || site.signIn.test(f.url ?? '') || site.loggedIn.test(f.url ?? '')));
       const pick = seen.find((f) => f.frameId === 0) ?? seen[0];
       frame = pick?.frameId ?? 0;
-      return pick?.has ?? 'none';
+      return pick?.has === 'choose' ? `choose ${pick.sig}` : pick?.has ?? 'none';   // each page of choices counts as its own step
     } catch (e) { return /cannot access|permission/i.test(e.message) ? 'blocked' : 'none'; }
   };
   // A sign-in page may wait until it is actually on screen, so its tab and window are brought to the front.
@@ -221,6 +235,12 @@ export async function signIn(site, tab, say, { whateverTheAddress = false } = {}
       await run('push');
       await say(`${asks ? `The site says: “${asks}”.` : ''} Approve the sign-in on your phone.`.trim(), 'needs-approval');
       patience = 260;
+    }
+    if (has.startsWith('choose')) {
+      const picked = (await run('choose'))[0]?.result?.picked;
+      if (picked === 'push') { await say('Approve the sign-in on your phone.', 'needs-approval'); patience = 260; }
+      else await say(picked === 'email' ? 'Asked the site to email a code' : picked === 'text' ? 'Asked the site to text a code' : 'Choosing how the site should reach you');
+      since = Date.now();
     }
     if (has === 'remember') await run('remember');
     acted.add(has);

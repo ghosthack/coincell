@@ -91,9 +91,18 @@ createSite({ port: 4701, name: 'Harborline Bank', color: '#0b4f6c', handler: (c)
   if (path === '/login') {
     if (method !== 'POST') return login();
     if (form.username !== 'demo' || form.password !== 'harbor-demo') return login('The username or password is incorrect.');
+    c.start({ stage: 'how' }); return c.redirect('/verify/how');
+  }
+  if (path === '/verify/how') {   // "we don't recognise this device": how should the code reach you?
+    if (!session) return c.redirect('/login');
+    if (method !== 'POST') return c.html(`<div class="box"><h2>We don't recognize this device</h2><p>How should we get in touch?</p><form method="post" action="/verify/how">
+      <label><input type="radio" name="how" value="text" style="display:inline;width:auto"> Text a code to (•••) •••-0142</label>
+      <label><input type="radio" name="how" value="email" style="display:inline;width:auto"> Email a code to d•••@mail.example</label>
+      <button id="how-next">Next</button></form></div>`);
+    if (form.how !== 'email') return c.html('<div class="box"><h2>Texting is not available in the demo</h2><p><a href="/verify/how">Choose again</a></p></div>');
     const code = String(Math.floor(100000 + Math.random() * 900000));   // a new code for every sign-in, as real sites do
     deliver('Harborline Bank', 'alerts@harborline.example', 'Your Harborline security code', `Your security code is ${code}. It expires in 10 minutes. We will never ask you for it by phone.`);
-    c.start({ stage: 'mfa', code }); return c.redirect('/verify');
+    session.stage = 'mfa'; session.code = code; return c.redirect('/verify');
   }
   if (path === '/verify') {
     if (!session) return c.redirect('/login');
