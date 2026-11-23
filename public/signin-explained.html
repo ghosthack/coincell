@@ -1,0 +1,153 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>coincell: how signing in works</title>
+<style>
+  :root { color-scheme: light; --page: #f4f3f0; --surface: #fcfcfb; --border: #e3e2dd; --text: #0b0b0b; --text-2: #52514e; --text-3: #7b7a75;
+    --auto: #2a78d6; --you: #eb6834; --no: #d03b3b; --good: #0ca30c; }
+  @media (prefers-color-scheme: dark) { :root { color-scheme: dark; --page: #111110; --surface: #1a1a19; --border: #30302d; --text: #f0efec; --text-2: #c3c2b7; --text-3: #8f8e86;
+    --auto: #3987e5; --you: #d95926; --no: #e06060; --good: #3fbf3f; } }
+  * { box-sizing: border-box; }
+  body { margin: 0; background: var(--page); color: var(--text); font: 15px/1.5 -apple-system, BlinkMacSystemFont, "Segoe UI", system-ui, sans-serif; }
+  main { max-width: 1080px; margin: 0 auto; padding: 24px 20px 64px; }
+  h1 { font-size: 24px; letter-spacing: -.01em; margin: 0 0 6px; }
+  h2 { font-size: 17px; margin: 0 0 4px; }
+  p { margin: 0 0 10px; } .lead { color: var(--text-2); max-width: 720px; }
+  a { color: inherit; }
+  .legend { display: flex; flex-wrap: wrap; gap: 8px 18px; margin: 16px 0 20px; font-size: 13px; color: var(--text-2); }
+  .tag { display: inline-block; font-size: 11px; font-weight: 600; letter-spacing: .03em; text-transform: uppercase; border-radius: 999px; padding: 1px 8px; border: 1.5px solid; }
+  .tag.auto { color: var(--auto); } .tag.you { color: var(--you); } .tag.no { color: var(--no); border-style: dashed; }
+  .panels { display: grid; gap: 16px; grid-template-columns: repeat(3, minmax(0, 1fr)); align-items: start; }
+  @media (max-width: 900px) { .panels { grid-template-columns: minmax(0, 1fr); } }
+  .panel { background: var(--surface); border: 1px solid var(--border); border-radius: 12px; padding: 16px; }
+  .panel > .sub { color: var(--text-2); font-size: 13px; margin-bottom: 14px; min-height: 2.9em; }
+  .flow { display: grid; gap: 0; }
+  .step { border: 1.5px solid var(--border); border-radius: 9px; padding: 9px 11px; font-size: 14px; }
+  .step b { display: block; } .step small { color: var(--text-2); font-size: 12.5px; display: block; }
+  .step .tag { float: right; margin-left: 8px; }
+  .step.auto { border-color: var(--auto); } .step.you { border-color: var(--you); } .step.no { border-color: var(--no); border-style: dashed; }
+  .arrow { text-align: center; color: var(--text-3); line-height: 1.5; font-size: 15px; }
+  .side { display: grid; grid-template-columns: 1fr 1fr; gap: 8px; }
+  .verdict { margin-top: 14px; padding-top: 12px; border-top: 1px solid var(--border); font-size: 13.5px; }
+  .verdict b { display: block; font-size: 14px; }
+  .why { margin-top: 20px; display: grid; gap: 16px; grid-template-columns: repeat(2, minmax(0, 1fr)); }
+  @media (max-width: 900px) { .why { grid-template-columns: minmax(0, 1fr); } }
+  .why ul { margin: 6px 0 0; padding-left: 18px; } .why li { margin-bottom: 6px; }
+  table { width: 100%; border-collapse: collapse; font-size: 14px; }
+  th, td { text-align: left; padding: 8px 10px; border-bottom: 1px solid var(--border); vertical-align: top; }
+  th { font-size: 12px; font-weight: 500; color: var(--text-3); }
+  .scroll { overflow-x: auto; }
+  .foot { color: var(--text-3); font-size: 13px; margin-top: 18px; }
+</style>
+</head>
+<body>
+<main>
+  <p><a href="/">← coincell</a></p>
+  <h1>Signing in to a site that wants an authenticator code</h1>
+  <p class="lead">Some sites ask for a 6-digit code from an authenticator after the password. This page shows what happens today, the two ways to close the loop, and why the code cannot simply be taken from the password manager that already has it.</p>
+
+  <div class="legend">
+    <span><span class="tag auto">automatic</span> coincell does it</span>
+    <span><span class="tag you">you</span> needs you</span>
+    <span><span class="tag no">not possible</span> no way in for a program</span>
+  </div>
+
+  <div class="panels">
+    <section class="panel">
+      <h2>Today</h2>
+      <div class="sub">One step is yours, each time the site asks for a code.</div>
+      <div class="flow">
+        <div class="step auto"><span class="tag auto">automatic</span><b>Refresh starts</b><small>The extension opens the site's sign-in page.</small></div>
+        <div class="arrow">↓</div>
+        <div class="step auto"><span class="tag auto">automatic</span><b>Username and password</b><small>Taken from the Keychain, filled in on the site's own page.</small></div>
+        <div class="arrow">↓</div>
+        <div class="step"><b>Site: "Enter the code from your authenticator app"</b></div>
+        <div class="arrow">↓</div>
+        <div class="step you"><span class="tag you">you</span><b>Read the code, type it on the dashboard</b><small>Open your password manager, find the 6 digits, type them in the site's row. About 20 seconds, within 5 minutes.</small></div>
+        <div class="arrow">↓</div>
+        <div class="step auto"><span class="tag auto">automatic</span><b>Code entered, "Remember this device" ticked</b></div>
+        <div class="arrow">↓</div>
+        <div class="step auto"><span class="tag auto">automatic</span><b>Accounts read</b></div>
+      </div>
+      <div class="verdict"><b>Every day: usually nothing.</b>While the site remembers the browser it skips the code. When it forgets (its choice, often every few weeks, or after an update), the refresh waits for you.</div>
+    </section>
+
+    <section class="panel">
+      <h2>Later, option A: coincell makes the code</h2>
+      <div class="sub">Closed loop. One setup step, then nothing.</div>
+      <div class="flow">
+        <div class="step you"><span class="tag you">once</span><b>Give coincell the setup key</b><small>The same key your password manager was given. Typed into Settings, kept in the Keychain beside the login.</small></div>
+        <div class="arrow">↓ from then on</div>
+        <div class="step auto"><span class="tag auto">automatic</span><b>Username and password</b></div>
+        <div class="arrow">↓</div>
+        <div class="step"><b>Site asks for the authenticator code</b></div>
+        <div class="arrow">↓</div>
+        <div class="step auto"><span class="tag auto">automatic</span><b>coincell works out the code</b><small>Setup key + the current time → 6 digits. No network, no waiting.</small></div>
+        <div class="arrow">↓</div>
+        <div class="step auto"><span class="tag auto">automatic</span><b>Code entered, accounts read</b></div>
+      </div>
+      <div class="verdict"><b>Every day: nothing, ever.</b>Your password manager keeps showing the same codes; nothing changes for your own logins.</div>
+    </section>
+
+    <section class="panel">
+      <h2>Later, option B: codes by email</h2>
+      <div class="sub">Closed loop too, if the site offers email as its second step.</div>
+      <div class="flow">
+        <div class="step you"><span class="tag you">once</span><b>Switch the site from authenticator to email codes</b><small>In the site's own security settings, pointing at the inbox coincell reads.</small></div>
+        <div class="arrow">↓ from then on</div>
+        <div class="step auto"><span class="tag auto">automatic</span><b>Username and password</b></div>
+        <div class="arrow">↓</div>
+        <div class="step"><b>Site emails a code</b><small>Usually arrives in 5 to 60 seconds.</small></div>
+        <div class="arrow">↓</div>
+        <div class="step auto"><span class="tag auto">automatic</span><b>coincell reads it from the inbox</b><small>Only mail from that site's sender; nothing kept.</small></div>
+        <div class="arrow">↓</div>
+        <div class="step auto"><span class="tag auto">automatic</span><b>Code entered, accounts read</b></div>
+      </div>
+      <div class="verdict"><b>Every day: nothing, when mail is prompt.</b>Your own logins to that site then also wait on an email instead of the authenticator. Not every site offers email for this.</div>
+    </section>
+  </div>
+
+  <div class="why">
+    <section class="panel">
+      <h2>Why not take the code from the password manager that already has it?</h2>
+      <div class="flow" style="margin-top:10px">
+        <div class="side">
+          <div class="step"><b>Password manager</b><small>Holds the setup key, shows the codes.</small></div>
+          <div class="step auto"><b>coincell</b><small>Needs the 6 digits.</small></div>
+        </div>
+        <div class="arrow">✕</div>
+        <div class="step no"><span class="tag no">not possible</span><b>No door between them</b><small>The system's password manager hands a code only to a person: you look at it, or you approve an autofill with your fingerprint or face. It offers other programs no command or interface to ask for one.</small></div>
+      </div>
+      <ul>
+        <li>That is deliberate. If any program could ask for codes, so could any malware.</li>
+        <li>The only way around it would be to operate the password manager's window as if a person were clicking. coincell does not do that.</li>
+      </ul>
+    </section>
+    <section class="panel">
+      <h2>Why a second copy of the key works</h2>
+      <p>An authenticator code is not sent by the site. It is arithmetic: <b>setup key + current time → 6 digits</b>, recomputed every 30 seconds. The site does the same sum and compares.</p>
+      <ul>
+        <li>Anything holding the same key shows the same code at the same moment. Two holders do not conflict, and the site cannot tell which one produced a code.</li>
+        <li>So "a separate thing" is not a second authenticator account. It is the same key, kept in one more place.</li>
+        <li><b>The cost:</b> on that computer, the password and the key for the second step then sit together in the Keychain. Someone who gets into that Keychain gets both. That is already true wherever one password manager holds both.</li>
+      </ul>
+    </section>
+  </div>
+
+  <section class="panel" style="margin-top:16px">
+    <h2>Which is least bother day to day?</h2>
+    <div class="scroll">
+    <table>
+      <tr><th></th><th>Setup, once</th><th>Each refresh</th><th>Your own logins to the site</th><th>Can stall when</th></tr>
+      <tr><td><b>Today</b></td><td>None</td><td>Nothing while remembered; otherwise type 6 digits</td><td>Unchanged</td><td>You are not around to type the code</td></tr>
+      <tr><td><b>A: coincell makes the code</b></td><td>Enter the setup key in Settings</td><td>Nothing</td><td>Unchanged</td><td>The site re-issues the key (then enter the new one)</td></tr>
+      <tr><td><b>B: codes by email</b></td><td>Change the site's security setting</td><td>Nothing</td><td>You wait for an email instead of opening the authenticator</td><td>Mail is slow, or the site does not offer email</td></tr>
+    </table>
+    </div>
+    <p class="foot">Either closed loop can be used per site: A where a site insists on an authenticator, B where it emails. Option A is not built yet; reading emailed codes is built and tested against the demo inbox, not yet against a real one.</p>
+  </section>
+</main>
+</body>
+</html>
