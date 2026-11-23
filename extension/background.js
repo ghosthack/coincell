@@ -170,6 +170,85 @@ async function setRecording(tab, on) {
   return { ok: true, recording: Boolean(on) };
 }
 
+// ---- the bridge: the dashboard asks, this does it ----
+// The extension keeps a request open to each coincell it can reach; a command is the answer.
+// "Refresh" means: open the site (in a background tab, so the tab you are using is left alone),
+// read it if you are logged in, and say so if you are not.
+const busy = new Set();
+const say = (site, state, message, warnings) => post(TARGETS[site.target], '/ext/progress', { site: site.id, state, message, warnings }).catch(() => {});
+const settled = async (tabId, ms = 30_000) => { for (const end = Date.now() + ms; Date.now() < end; await sleep(300)) { if ((await chrome.tabs.get(tabId)).status === 'complete') break; } await sleep(2500); return chrome.tabs.get(tabId); };
+
+async function refreshOne(site) {
+  const key = `${site.target}:${site.id}`;
+  if (busy.has(key)) return;
+  busy.add(key);
+  // A site waiting for a login must be read the moment you are in, however recently it was last read.
+  const awaitLogin = async (message) => { const { cool = {} } = await chrome.storage.session.get('cool'); delete cool[key]; await chrome.storage.session.set({ cool }); await say(site, 'needs-login', message); };
+  try {
+    await say(site, 'working', 'Opening the site');
+    let tab = site.ownTab || !site.home ? (await chrome.tabs.query({})).find((t) => site.loggedIn.test(t.url ?? '')) : null, opened = false;
+    if (!tab) {
+      if (!site.home) return void await awaitLogin('Open this site and log in');
+      // A login tab this extension opened on an earlier attempt is replaced, not piled on.
+      // Tabs you opened yourself are never closed.
+      const { mine = {} } = await chrome.storage.session.get('mine');
+      if (mine[key] != null) await chrome.tabs.remove(mine[key]).catch(() => {});
+      tab = await settled((await chrome.tabs.create({ url: site.home, active: false })).id);
+      opened = true;
+      await chrome.storage.session.set({ mine: { ...mine, [key]: site.loggedIn.test(tab.url ?? '') ? undefined : tab.id } });
+    }
+    if (!site.loggedIn.test(tab.url ?? '')) return void await awaitLogin(opened ? 'Log in to this site in the tab that was opened; it will be read as soon as you are in' : 'Log in to this site');
+    await say(site, 'working', 'Reading');
+    const r = await sendSite(tab);
+    if (r.ok) {
+      await say(site, 'done', r.message, r.warnings);
+      const { cool = {} } = await chrome.storage.session.get('cool');   // read; no need to read it again for a while
+      await chrome.storage.session.set({ cool: { ...cool, [key]: Date.now() } });
+      if (opened && !site.ownTab) await chrome.tabs.remove(tab.id).catch(() => {});
+    } else if (/not logged in/i.test(r.message)) await awaitLogin(r.message);
+    else await say(site, 'failed', r.message);
+  } catch (e) {
+    await say(site, 'failed', e.message);
+  } finally {
+    busy.delete(key);
+  }
+}
+
+const polling = new Set();
+async function listen(name) {
+  if (polling.has(name)) return;
+  polling.add(name);
+  const ids = [...new Set(SITES.filter((s) => s.target === name && s.loggedIn).map((s) => s.id))];
+  try {
+    for (;;) {
+      const res = await fetch(`${TARGETS[name]}/ext/poll?sites=${ids.join(',')}`, { headers: { 'x-coincell': '1' } }).catch(() => null);
+      if (!res?.ok) break;   // coincell is not running there; the alarm below tries again
+      const cmd = await res.json().catch(() => ({}));
+      if (cmd.type === 'refresh') (async () => { for (const id of cmd.sites) { const site = SITES.find((s) => s.id === id && s.target === name && s.loggedIn); if (site) await refreshOne(site); } })();
+    }
+  } finally {
+    polling.delete(name);
+  }
+}
+const listenAll = () => { for (const name of Object.keys(TARGETS)) listen(name); };
+chrome.alarms.create('listen', { periodInMinutes: 0.5 });   // the browser puts idle extensions to sleep; this wakes it to listen again
+chrome.alarms.onAlarm.addListener(listenAll);
+chrome.runtime.onStartup.addListener(listenAll);
+chrome.runtime.onInstalled.addListener(listenAll);
+listenAll();
+
+// Sync when you log in: landing on a site's logged-in pages is the cue to read it, unless it was
+// read in the last 15 minutes or you have switched this off in the popup.
+chrome.tabs.onUpdated.addListener(async (tabId, info, tab) => {
+  if (info.status !== 'complete') return;
+  const site = SITES.find((s) => s.loggedIn?.test(tab.url ?? ''));
+  if (!site) return;
+  const key = `${site.target}:${site.id}`;
+  const [{ autoSync = true }, { cool = {} }] = await Promise.all([chrome.storage.local.get('autoSync'), chrome.storage.session.get('cool')]);
+  if (!autoSync || busy.has(key) || Date.now() - (cool[key] ?? 0) < 15 * 60_000) return;
+  refreshOne(site);
+});
+
 chrome.runtime.onMessage.addListener((msg, sender, reply) => {
   (async () => {
     if (msg.type === 'send') return [await sendSite(await chrome.tabs.get(msg.tabId))];

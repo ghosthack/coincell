@@ -2,7 +2,8 @@ import http from 'node:http';
 import fs from 'node:fs';
 import path from 'node:path';
 import { PUBLIC_DIR, DEMO, dataPath } from './paths.js';
-import { getAccounts, getNetWorth, getNetWorthByType, getHistoryNote, getHoldings, getTransactions, getCashflow, saveSnapshot, linkTransfers, removeAccounts, bankSummary } from './db.js';
+import { getAccounts, getNetWorth, getNetWorthByType, getHistoryNote, getHoldings, getTransactions, getCashflow, saveSnapshot, linkTransfers, removeAccounts, bankSummary, recordImport, getImports } from './db.js';
+import { poll, command, extension, active, progressBy, setProgress, nextRun } from './bridge.js';
 import { compareWithLastTime } from './checks.js';
 import { BANKS } from './banks/index.js';
 import { runSync, state } from './sync.js';
@@ -74,6 +75,42 @@ const server = http.createServer(async (req, res) => {
         return fs.createReadStream(file).pipe(res);
       }
     }
+    // ---- the bridge (see bridge.js) ----
+    if (url.pathname.startsWith('/ext/') && req.headers['x-coincell'] !== '1') return json(res, 403, { error: 'Forbidden' });   // pages cannot send this header
+    if (route === 'GET /ext/poll') return poll(res, url.searchParams.get('sites')?.split(',').filter(Boolean), (cmd) => json(res, 200, cmd));
+    if (route === 'POST /ext/progress') {
+      const { site, state: s, message, warnings } = await readBody(req);
+      if (BANKS.some((b) => b.id === site)) setProgress(site, s, message, warnings);
+      return json(res, 200, { ok: true });
+    }
+    if (route === 'GET /api/status') {
+      const { asOf, last } = getImports(), ext = extension();
+      return json(res, 200, { extension: ext.connected, active: active() || state.running,
+        institutions: BANKS.map((b) => ({ id: b.id, name: b.name, asOf: asOf.get(b.id) ?? null, last: last.get(b.id) ?? null, progress: progressBy[b.id] ?? null,
+          readBy: ext.sites.includes(b.id) || b.viaExtension ? 'extension' : b.needsBrowser ? 'browser' : 'file' })) });
+    }
+    if (route === 'POST /api/refresh') {
+      // Each institution goes the way it can: through the extension in your own Chrome where the
+      // extension knows the site, otherwise read directly from here.
+      const { bank } = await readBody(req);
+      const wanted = bank === 'all' || !bank ? BANKS : BANKS.filter((b) => b.id === bank);
+      if (!wanted.length) return json(res, 400, { error: 'Unknown institution' });
+      const ext = extension(), run = nextRun(), viaExtension = [], direct = [];
+      for (const b of wanted) {
+        if (ext.connected && ext.sites.includes(b.id)) { viaExtension.push(b); setProgress(b.id, 'queued', 'Waiting for the browser extension'); }
+        else if (b.viaExtension) setProgress(b.id, 'failed', ext.connected ? 'The browser extension does not know this site.' : 'The browser extension is not connected. Open Chrome with the coincell extension loaded.');
+        else { direct.push(b); setProgress(b.id, 'queued', 'Waiting'); }
+      }
+      if (viaExtension.length) command({ type: 'refresh', run, sites: viaExtension.map((b) => b.id) });
+      (async () => {   // the ones read from here, one at a time
+        for (const b of direct) {
+          setProgress(b.id, 'working', 'Reading');
+          try { await runSync(b.id); setProgress(b.id, 'done', state.last?.message ?? 'Done'); } catch (e) { setProgress(b.id, 'failed', e.message.split('\n')[0]); }
+        }
+      })();
+      return json(res, 202, { run, viaExtension: viaExtension.map((b) => b.id), direct: direct.map((b) => b.id) });
+    }
+
     // ---- from the browser extension (it sends the x-coincell header checked above) ----
     if (route === 'POST /api/import') {
       const { bank, snapshot } = await readBody(req);
@@ -87,6 +124,7 @@ const server = http.createServer(async (req, res) => {
       const linked = linkTransfers();
       state.last = { bank, ok: !warnings.length, at: new Date().toISOString(), message: `${known.name}: ${snapshot.accounts.length} account${snapshot.accounts.length === 1 ? '' : 's'} received${warnings.length ? `. ${warnings.join(' ')}` : ''}` };
       for (const w of warnings) console.log(`[${bank}] WARNING ${w}`);
+      recordImport(bank, true, `${snapshot.accounts.length} account${snapshot.accounts.length === 1 ? '' : 's'} read`, warnings);
       console.log(`[${bank}] ${snapshot.accounts.length} accounts from the extension, ${linked} new transfers matched`);
       return json(res, 200, { accounts: snapshot.accounts.length, linked, warnings });
     }

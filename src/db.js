@@ -25,6 +25,7 @@ db.exec(`
     transfer_id TEXT, principal REAL
   );
   CREATE INDEX IF NOT EXISTS transactions_date ON transactions (date DESC);
+  CREATE TABLE IF NOT EXISTS imports (bank TEXT PRIMARY KEY, at TEXT NOT NULL, ok INTEGER NOT NULL, message TEXT, warnings TEXT);
 `);
 
 try { db.exec('ALTER TABLE transactions ADD COLUMN principal REAL'); } catch { /* already there */ }
@@ -94,6 +95,18 @@ export function saveSnapshot(bankId, snap) {
     db.exec('ROLLBACK');
     throw e;
   }
+}
+
+/** When each institution last delivered, and how it went. */
+export function recordImport(bankId, ok, message, warnings = []) {
+  db.prepare(`INSERT INTO imports (bank, at, ok, message, warnings) VALUES (?, ?, ?, ?, ?)
+    ON CONFLICT(bank) DO UPDATE SET at = excluded.at, ok = excluded.ok, message = excluded.message, warnings = excluded.warnings`)
+    .run(bankId, new Date().toISOString(), ok ? 1 : 0, message ?? '', JSON.stringify(warnings));
+}
+export function getImports() {
+  const asOf = new Map(db.prepare('SELECT a.bank, MAX(b.date) AS d FROM accounts a JOIN balances b ON b.account_id = a.id GROUP BY a.bank').all().map((r) => [r.bank, r.d]));
+  const last = new Map(db.prepare('SELECT * FROM imports').all().map((r) => [r.bank, { at: r.at, ok: Boolean(r.ok), message: r.message, warnings: JSON.parse(r.warnings || '[]') }]));
+  return { asOf, last };
 }
 
 /** What is on record for one institution, for comparing an import against (see checks.js). */

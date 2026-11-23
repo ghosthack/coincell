@@ -1,6 +1,6 @@
 import { pathToFileURL } from 'node:url';
 import { BANKS, getBank } from './banks/index.js';
-import { saveSnapshot, linkTransfers } from './db.js';
+import { saveSnapshot, linkTransfers, recordImport } from './db.js';
 
 export const state = { running: false, bank: null, startedAt: null, log: [], last: null };
 
@@ -36,8 +36,11 @@ export async function runSync(bankId) {
     for (const bank of banks) {
       const log = (msg) => { state.log.push(`${bank.name}: ${msg}`); console.log(`[${bank.id}] ${msg}`); };
       try {
-        accounts += await syncOne(bank, log);
+        const n = await syncOne(bank, log);
+        accounts += n;
+        recordImport(bank.id, true, `${n} account${n === 1 ? '' : 's'} read`);
       } catch (e) {
+        recordImport(bank.id, false, e.message.split('\n')[0]);
         log(`Failed: ${e.message.split('\n')[0]}`);
         failed.push(`${bank.name} (${e.message.split('\n')[0]})`);
       }

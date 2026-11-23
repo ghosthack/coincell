@@ -50,6 +50,11 @@ activity from that site and hands them to coincell on the same computer. Nothing
 3. Log in to a site, then press the coincell icon and **Send this site**, or **Send all open sites** to do every
    open tab at once.
 
+The dashboard and the extension also talk to each other. **Refresh all** on the dashboard asks the extension to
+open each institution in a background tab and read it; one you are not logged in to is left open on its login
+page and marked as needing a login. And logging in to a known site is itself the cue to read it, with nothing to
+press (the popup has a switch for this). The Institutions table on the dashboard shows where each one stands.
+
 For a site coincell does not know yet, press **Start recording this site**, browse your accounts, positions and
 activity pages, and stop. The recording goes to `.data/recordings/` and holds the layout of the site's pages and
 data with every value masked; it is what a new site script is written from. Site scripts live in

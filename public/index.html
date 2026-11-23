@@ -54,8 +54,7 @@
   /* Sync controls sit in the top right corner, with the status line tucked under them and aligned to the same edge. */
   .sync { align-self: flex-start; display: flex; flex-direction: column; align-items: flex-end; gap: 6px; margin-left: auto; }
   #status { font-size: 12px; color: var(--text-muted); min-height: 1.4em; max-width: 340px; text-align: right; }
-  #status .mark { font-weight: 700; }
-  #status .ok { color: var(--good); } #status .bad { color: var(--critical); }
+  .mark { font-weight: 700; } .mark.ok { color: var(--good); } .mark.bad { color: var(--critical); }
   #chart { position: relative; height: 260px; }
   #chart svg { display: block; width: 100%; height: 100%; }
   #chart text { fill: var(--text-muted); font-size: 11px; font-variant-numeric: tabular-nums; }
@@ -77,6 +76,7 @@
   .tile .value { font-size: 22px; font-weight: 620; letter-spacing: -.01em; font-variant-numeric: tabular-nums; }
   .tile .sub { font-size: 12px; }
   tr.group td { font-size: 12px; font-weight: 600; color: var(--text-secondary); padding-top: 14px; border-bottom: 1px solid var(--border); }
+  button.small { height: 26px; padding: 0 9px; font-size: 12px; }
   .tag { display: inline-block; font-size: 11px; color: var(--text-secondary); border: 1px solid var(--border); border-radius: 999px; padding: 0 7px; margin-left: 6px; white-space: nowrap; }
   [hidden] { display: none !important; }
   .viz { position: relative; margin-bottom: 12px; }
@@ -118,8 +118,7 @@
     </div>
     <div class="sync">
       <div class="controls">
-        <select id="bank" aria-label="Bank"></select>
-        <button class="primary" id="sync">Sync now</button>
+        <button class="primary" id="refresh">Refresh all</button>
       </div>
       <div id="status" role="status"></div>
     </div>
@@ -146,6 +145,11 @@
   <section class="card">
     <div class="card-head"><h2>Accounts</h2></div>
     <div class="scroll" id="accounts"></div>
+  </section>
+
+  <section class="card">
+    <div class="card-head"><h2>Institutions</h2><span class="sub" id="ext-note"></span></div>
+    <div class="scroll" id="institutions"></div>
   </section>
 
   <section class="card">

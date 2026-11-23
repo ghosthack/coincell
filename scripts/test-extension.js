@@ -66,6 +66,32 @@ try {
   console.log(`data check  -> ${lines.filter((l) => l.startsWith('ok')).length} passed, ${lines.filter((l) => l.startsWith('FAIL')).length} failed: ${lines.at(-1)}`);
   if (verify.status !== 0) { fail('what the extension sent does not match the fake sites'); console.log(lines.filter((l) => l.startsWith('FAIL')).join('\n')); }
 
+  // The bridge: the dashboard asks, the extension does it, in background tabs.
+  const dash = (p, body) => fetch(`http://localhost:4690${p}`, body ? { method: 'POST', headers: { 'content-type': 'application/json', 'x-coincell': '1' }, body: JSON.stringify(body) } : undefined).then((r) => r.json());
+  const until = async (what, test, ms = 90_000) => { for (const end = Date.now() + ms; Date.now() < end; await new Promise((r) => setTimeout(r, 500))) { const st = await dash('/api/status'); if (test(st)) return st; } fail(`timed out waiting for ${what}`); return dash('/api/status'); };
+  const states = (st) => st.institutions.filter((i) => i.readBy === 'extension').map((i) => `${i.id} ${i.progress?.state ?? 'idle'}`).join(', ');
+  await until('the extension to connect', (st) => st.extension, 45_000);
+  await until('earlier syncs to settle', (s) => !s.active, 60_000); await new Promise((r) => setTimeout(r, 1500));
+  const tabsBefore = context.pages().length;
+  await dash('/api/refresh', { bank: 'all' });
+  let st = await until('refresh all', (s) => !s.active && s.institutions.filter((i) => i.readBy === 'extension').every((i) => i.progress));
+  console.log('refresh all ->', states(st));
+  if (st.institutions.filter((i) => i.readBy === 'extension').length !== 5 || st.institutions.some((i) => i.readBy === 'extension' && i.progress?.state !== 'done')) fail('refresh all should have read all five sites through the extension');
+  if (context.pages().length !== tabsBefore) fail(`refresh all should close the background tabs it opens (${tabsBefore} before, ${context.pages().length} after)`);
+
+  // Logged out of one site: it is reported as needing a login, with the login page left open ...
+  await tabs[4703].goto('http://localhost:4703/logout');
+  await dash('/api/refresh', { bank: 'copperleaf' });
+  st = await until('the logged-out site to report', (s) => !s.active && ['needs-login', 'done', 'failed'].includes(s.institutions.find((i) => i.id === 'copperleaf').progress?.state));
+  console.log('logged out  ->', states(st));
+  if (st.institutions.find((i) => i.id === 'copperleaf').progress.state !== 'needs-login') fail('a logged-out site should be reported as needing a login');
+  if (tabs[4703].isClosed()) fail('a tab the user opened must never be closed');
+  if (!context.pages().some((pg) => pg !== tabs[4703] && /localhost:4703\/login/.test(pg.url()))) fail('the login page should be left open for the user');
+  // ... and logging in is the cue to read it, with nothing pressed.
+  await tabs[4703].goto('http://localhost:4703/login'); await logins[4703](tabs[4703]);
+  st = await until('the sync that follows a login', (s) => s.institutions.find((i) => i.id === 'copperleaf').progress?.state === 'done', 60_000);
+  console.log('after login ->', states(st));
+
   // A site that changed: send Meridian again with an account, the holdings and the transactions gone.
   const thin = await (await fetch('http://localhost:4690/api/import', { method: 'POST', headers: { 'content-type': 'application/json', 'x-coincell': '1' },
     body: JSON.stringify({ bank: 'meridian', snapshot: { accounts: [{ id: 'Z31-553318', name: 'Individual Brokerage', type: 'investment', balance: 36000 }] } }) })).json();

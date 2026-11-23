@@ -164,13 +164,7 @@ async function load() {
   if (h?.held) noteParts.push(`${h.held} account${h.held === 1 ? ' has' : 's have'} no past values from ${h.held === 1 ? 'its' : 'their'} institution and ${h.held === 1 ? 'is' : 'are'} drawn flat at ${h.held === 1 ? 'its' : 'their'} earliest known value.`);
   $('history-note').hidden = !noteParts.length;
   $('history-note').textContent = noteParts.join(' ');
-  noDataHint = overview.demo ? 'No data yet. Press “Sync now”.' : overview.banks.some((b) => b.needsBrowser) ? 'No data yet. Press “Sync now”.' : 'No institutions connected yet. Run “npm run demo” to explore with made-up data.';
-
-  if (!$('bank').options.length) {
-    $('bank').append(el('option', { value: 'all' }, 'All institutions'), ...overview.banks.map((b) => el('option', { value: b.id }, b.name)));
-    $('bank').value = localStorage.getItem('bank') ?? 'all';
-    if (!$('bank').value) $('bank').value = 'all';
-  }
+  noDataHint = overview.demo ? 'No data yet. Press “Refresh all”.' : 'No data yet. Log in to an institution in Chrome with the coincell extension, or press “Refresh all”.';
 
   const count = (...types) => accounts.filter((a) => types.includes(a.type)).length;
   const plural = (n) => `${n} account${n === 1 ? '' : 's'}`;
@@ -242,34 +236,54 @@ async function load() {
   return overview.sync;
 }
 
-// ---------- sync ----------
-function showStatus(st) {
-  const box = $('status');
-  $('sync').disabled = st.running;
-  if (st.running) return box.replaceChildren(`Syncing… ${st.log.at(-1) ?? ''}`);
-  if (!st.last) return box.replaceChildren();
-  box.replaceChildren(el('span', { class: `mark ${st.last.ok ? 'ok' : 'bad'}` }, st.last.ok ? '✓ ' : '✕ '),
-    `${st.last.ok ? '' : 'Check: '}${st.last.message} · ${new Date(st.last.at).toLocaleTimeString(undefined, { hour: 'numeric', minute: '2-digit' })}`);
+// ---------- refreshing ----------
+// Each institution is read the way it can be: through the browser extension in your own Chrome,
+// or directly by coincell. This shows where each one stands and lets you ask for a refresh.
+const post = (path, body) => api(path, { method: 'POST', headers: { 'content-type': 'application/json', 'x-coincell': '1' }, body: JSON.stringify(body) });
+const READ_BY = { extension: 'Your Chrome, via the extension', browser: 'A browser coincell opens', file: 'A file on this computer' };
+const ago = (iso) => { const m = Math.round((Date.now() - Date.parse(iso)) / 60000); return m < 1 ? 'just now' : m < 60 ? `${m} min ago` : m < 1440 ? `${Math.round(m / 60)} h ago` : `${Math.round(m / 1440)} d ago`; };
+let lastSeenImport = null;   // null until the first look, so the first look does not count as a change
+
+function standing(i) {   // one phrase for where an institution stands, with a mark that is not colour alone
+  const p = i.progress;
+  if (p?.state === 'queued' || p?.state === 'working') return [el('span', { class: 'mark' }, '… '), p.message || 'Working'];
+  if (p?.state === 'needs-login') return [el('span', { class: 'mark' }, '→ '), 'Needs a login in Chrome'];
+  if (p?.state === 'failed') return [el('span', { class: 'mark bad' }, '✕ '), p.message];
+  if (!i.last) return [el('span', { class: 'muted' }, 'Never read')];
+  const warnings = i.last.warnings ?? [];
+  return [el('span', { class: `mark ${i.last.ok && !warnings.length ? 'ok' : 'bad'}` }, i.last.ok ? (warnings.length ? '⚠ ' : '✓ ') : '✕ '), `${i.last.message} · ${ago(i.last.at)}`,
+    ...warnings.map((w) => el('div', { class: 'muted' }, w))];
 }
 
-async function poll() {
-  const st = await api('/api/sync');
-  showStatus(st);
-  if (st.running) return setTimeout(poll, 1000);
-  await load();
+function showStanding(st) {
+  $('ext-note').textContent = st.institutions.some((i) => i.readBy === 'extension') ? (st.extension ? 'Browser extension connected.' : 'Browser extension not connected: open Chrome with the coincell extension loaded.') : '';
+  table($('institutions'), [
+    { label: 'Institution', get: (r) => r.name },
+    { label: 'Read through', get: (r) => READ_BY[r.readBy], cls: 'muted' },
+    { label: 'Data as of', get: (r) => (r.asOf ? fmtDate(r.asOf, { month: 'short', day: 'numeric' }) : '–'), cls: 'muted' },
+    { label: 'Last refresh', get: standing, cls: 'wrap' },
+    { label: '', num: true, get: (r) => { const b = el('button', { class: 'small', 'data-bank': r.id }, 'Refresh'); b.disabled = ['queued', 'working'].includes(r.progress?.state); return b; } },
+  ], st.institutions, 'No institutions yet.');
+  const busy = st.institutions.filter((i) => ['queued', 'working'].includes(i.progress?.state)).length;
+  const login = st.institutions.filter((i) => i.progress?.state === 'needs-login').map((i) => i.name);
+  const stale = st.institutions.map((i) => i.last?.at).filter(Boolean).sort()[0];
+  $('refresh').disabled = st.active;
+  $('status').textContent = busy ? `Refreshing ${busy} of ${st.institutions.length}…` : login.length ? `Log in to ${login.join(', ')} in Chrome` : stale ? `Oldest refresh ${ago(stale)}` : '';
 }
 
-$('sync').addEventListener('click', async () => {
-  localStorage.setItem('bank', $('bank').value);
-  $('sync').disabled = true;
-  try {
-    await api('/api/sync', { method: 'POST', headers: { 'content-type': 'application/json', 'x-coincell': '1' }, body: JSON.stringify({ bank: $('bank').value }) });
-    poll();
-  } catch (e) {
-    $('status').replaceChildren(el('span', { class: 'mark bad' }, '✕ '), e.message);
-    $('sync').disabled = false;
-  }
-});
+async function watch() {   // follow a refresh to its end, then show the new numbers
+  const st = await api('/api/status');
+  showStanding(st);
+  const newest = st.institutions.map((i) => i.last?.at ?? '').sort().at(-1);
+  if (newest !== lastSeenImport) { const first = lastSeenImport === null; lastSeenImport = newest; if (!first) await load(); }
+  setTimeout(watch, st.active ? 1500 : 15_000);   // idle: still look now and then, for syncs that start when you log in
+}
+async function refresh(bank) {
+  $('refresh').disabled = true;
+  try { await post('/api/refresh', { bank }); showStanding(await api('/api/status')); } catch (e) { $('status').textContent = e.message; $('refresh').disabled = false; }
+}
+$('refresh').addEventListener('click', () => refresh('all'));
+$('institutions').addEventListener('click', (e) => { if (e.target.dataset.bank) refresh(e.target.dataset.bank); });
 $('range').addEventListener('click', (e) => { if (e.target.dataset.days != null) setRange(Number(e.target.dataset.days)); });
 $('txn-account').addEventListener('change', loadTransactions);
 const setMode = (mode) => { nwMode = mode; localStorage.setItem('nwMode', mode); for (const b of $('nw-mode').children) b.setAttribute('aria-pressed', String(b.dataset.mode === mode)); drawChart(); };
@@ -277,5 +291,4 @@ $('nw-mode').addEventListener('click', (e) => { if (e.target.dataset.mode) setMo
 for (const b of $('nw-mode').children) b.setAttribute('aria-pressed', String(b.dataset.mode === nwMode));
 new ResizeObserver(() => drawChart()).observe($('chart'));
 
-load().then((st) => { showStatus(st); if (st.running) poll(); })
-  .catch((e) => $('status').replaceChildren(el('span', { class: 'mark bad' }, '✕ '), e.message));
+load().then(watch).catch((e) => { $('status').textContent = e.message; });
