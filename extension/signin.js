@@ -33,6 +33,7 @@ function onPage(step, data) {
   // The layout of the page, for working out why a sign-in went wrong: headings, and the labels of
   // fields and buttons. No field values; digits and anything shaped like an email address are masked.
   if (step === 'outline') {
+    const texts = [...document.querySelectorAll('p, label, li, [role=radio], [role=option]')].filter(shown2).map((e) => e.textContent.replace(/\s+/g, ' ').trim()).filter((t) => t.length > 3 && t.length < 160).slice(0, 14);
     const mask = (t) => String(t ?? '').replace(/\s+/g, ' ').trim().replace(/[^\s@]+@[^\s@]+/g, 'x@x').replace(/\d/g, '9').slice(0, 90);
     return {
       path: location.pathname.replace(/\d/g, '9').slice(0, 80), frames: document.querySelectorAll('iframe').length,
@@ -41,6 +42,7 @@ function onPage(step, data) {
         label: mask(i.labels?.[0]?.textContent || i.getAttribute('aria-label') || i.placeholder), shown: shown(i), checked: i.type === 'radio' || i.type === 'checkbox' ? i.checked : undefined })),
       buttons: buttons(document).slice(0, 15).map((b) => mask(label(b))),
       links: [...document.querySelectorAll('a')].filter(shown2).slice(0, 15).map((a) => mask(a.textContent)).filter(Boolean),
+      texts: texts.map(mask),
     };
   }
   // A page offering to send an approval to the site's phone app.
@@ -165,7 +167,10 @@ export async function signIn(site, tab, say, { whateverTheAddress = false } = {}
   let lastNoted = '';
   const note = async (has) => {
     if (has === lastNoted) return; lastNoted = has;
-    const outline = await run('outline').then((r) => r[0]?.result).catch(() => null);
+    // The frame being acted on, or, when there is none, whichever frame has the most on it.
+    const all = await chrome.scripting.executeScript({ target: { tabId: tab.id, allFrames: true }, func: onPage, args: ['outline', {}] }).catch(() => []);
+    const size = (o) => (o?.headings?.length ?? 0) + (o?.buttons?.length ?? 0) + (o?.fields?.filter((f) => f.shown).length ?? 0);
+    const outline = all.find((r) => r.frameId === frame && size(r.result))?.result ?? all.map((r) => r.result).sort((x, y) => size(y) - size(x))[0];
     if (outline) await fetch(`${TARGETS[site.target]}/api/recordings`, { method: 'POST', headers: { 'content-type': 'application/json', 'x-coincell': '1' },
       body: JSON.stringify({ host: `${site.id}.signin`, entry: { kind: 'signin', at: new Date().toISOString(), version: chrome.runtime.getManifest().version, has, outline } }) }).catch(() => {});
   };
@@ -179,6 +184,7 @@ export async function signIn(site, tab, say, { whateverTheAddress = false } = {}
     const inByAddress = site.loggedIn.test(now.url ?? '');
     if (inByAddress && whateverTheAddress && !(acted.size && calm >= 4)) { /* keep looking at the page */ } else
     if (inByAddress) {
+      if (whateverTheAddress) { lastNoted = ''; await note('taken as logged in'); }
       if (rejected[key]) { delete rejected[key]; await chrome.storage.local.set({ rejected }); }
       return { ok: true };
     }
