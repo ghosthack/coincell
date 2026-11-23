@@ -55,10 +55,14 @@ const settingsPath = () => dataPath('settings.json');
 export const getSettings = () => { try { return JSON.parse(fs.readFileSync(settingsPath(), 'utf8')); } catch { return {}; } };
 export const saveSettings = (patch) => { const next = { ...getSettings(), ...patch }; fs.writeFileSync(settingsPath(), JSON.stringify(next, null, 2)); return next; };
 
-/** Where the extension looks for emailed sign-in codes. */
-export function codesInbox() {
+/** The inbox named for one institution's codes, or '' when it uses the default. */
+export const siteInbox = (site) => String(getSettings().inboxes?.[site] ?? '').trim().toLowerCase();
+export const saveSiteInbox = (site, address) => saveSettings({ inboxes: { ...getSettings().inboxes, [site]: String(address ?? '').trim() } });
+
+/** Where the extension looks for an institution's emailed sign-in codes: its own inbox if one is named, else the default. */
+export function codesInbox(site) {
   if (DEMO) return { address: 'demo@mail.example', feeds: ['http://localhost:4706/mail/u/0/feed/atom'] };
-  const address = String(getSettings().codesInbox ?? '').trim().toLowerCase();
+  const address = siteInbox(site) || String(getSettings().codesInbox ?? '').trim().toLowerCase();
   // Gmail numbers the accounts a browser is signed in to. With an inbox named, the extension picks
   // the one whose feed names that address; with none named, it uses the first.
   if (!/^[^@\s]+@[^@\s]+$/.test(address)) return { address: '', feeds: ['https://mail.google.com/mail/u/0/feed/atom'] };

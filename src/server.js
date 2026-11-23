@@ -8,7 +8,7 @@ import { compareWithLastTime } from './checks.js';
 import { BANKS } from './banks/index.js';
 import { runSync, state } from './sync.js';
 import { getInsights } from './insights.js';
-import { saveLogin, removeLogin, getLogin, loginSavedAt, storeName, getSettings, saveSettings, codesInbox } from './logins.js';
+import { saveLogin, removeLogin, getLogin, loginSavedAt, storeName, getSettings, saveSettings, codesInbox, siteInbox, saveSiteInbox } from './logins.js';
 
 const PORT = Number(process.env.PORT) || (DEMO ? 4690 : 4680); // demo and real can run side by side
 const HOST = '127.0.0.1'; // never expose financial data beyond this machine
@@ -90,12 +90,15 @@ const server = http.createServer(async (req, res) => {
       const site = url.searchParams.get('site');
       if (!BANKS.some((b) => b.id === site)) return json(res, 400, { error: 'Unknown institution' });
       const login = getLogin(site);
-      return json(res, 200, login ? { ...login, inbox: codesInbox() } : { saved: false });
+      return json(res, 200, login ? { ...login, inbox: codesInbox(site) } : { saved: false });
     }
     if (route === 'POST /api/logins') {
-      const { site, username, password, remove } = await readBody(req);
+      const { site, username, password, inbox, remove } = await readBody(req);
       if (!BANKS.some((b) => b.id === site)) return json(res, 400, { error: 'Unknown institution' });
-      if (remove) removeLogin(site); else saveLogin(site, username, password);
+      if (inbox && !/^[^@\s]+@[^@\s]+$/.test(inbox)) return json(res, 400, { error: 'That inbox does not look like an email address' });
+      // The inbox can be changed by itself, without typing the password again.
+      if (remove) removeLogin(site); else if (username || password || !getLogin(site)) saveLogin(site, username, password);
+      if (inbox !== undefined) saveSiteInbox(site, remove ? '' : inbox);
       return json(res, 200, { ok: true });
     }
     if (route === 'POST /api/settings') {
@@ -107,7 +110,7 @@ const server = http.createServer(async (req, res) => {
     if (route === 'GET /api/status') {
       const { asOf, last } = getImports(), ext = extension();
       return json(res, 200, { extension: ext.connected, active: active() || state.running, loginStore: storeName, codesInbox: DEMO ? codesInbox().address : getSettings().codesInbox ?? '',
-        institutions: BANKS.map((b) => ({ id: b.id, name: b.name, asOf: asOf.get(b.id) ?? null, last: last.get(b.id) ?? null, progress: progressBy[b.id] ?? null, canSignIn: ext.signIn.includes(b.id), loginSavedAt: ext.signIn.includes(b.id) ? loginSavedAt(b.id) : null,
+        institutions: BANKS.map((b) => ({ id: b.id, name: b.name, asOf: asOf.get(b.id) ?? null, last: last.get(b.id) ?? null, progress: progressBy[b.id] ?? null, canSignIn: ext.signIn.includes(b.id), loginSavedAt: ext.signIn.includes(b.id) ? loginSavedAt(b.id) : null, inbox: DEMO ? '' : siteInbox(b.id),
           readBy: ext.sites.includes(b.id) || b.viaExtension ? 'extension' : b.needsBrowser ? 'browser' : 'file' })) });
     }
     if (route === 'POST /api/refresh') {

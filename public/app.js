@@ -269,6 +269,7 @@ function showStanding(st) {
   table($('logins'), [
     { label: 'Institution', get: (r) => r.name },
     { label: 'Saved login', get: (r) => (r.loginSavedAt ? `Saved ${ago(r.loginSavedAt)}` : 'None'), cls: 'muted' },
+    { label: 'Codes arrive in', get: (r) => r.inbox || (st.codesInbox ? `${st.codesInbox} (default)` : 'The default inbox'), cls: 'muted' },
     { label: '', num: true, get: (r) => el('button', { class: 'small', 'data-login': r.id }, r.loginSavedAt ? 'Change' : 'Save a login…') },
   ], st.institutions.filter((i) => i.canSignIn), st.extension ? 'The extension cannot sign in to any of your institutions yet.' : 'Open Chrome with the coincell extension loaded to set this up.');
   $('store-note').textContent = `Logins are kept in ${st.loginStore}.`;
@@ -304,7 +305,9 @@ function askLogin(id) {
   loginFor = id;
   $('login-title').textContent = `Login for ${inst.name}`;
   $('login-note').textContent = `Kept in ${latest.loginStore}${inst.loginSavedAt ? `. One was saved ${ago(inst.loginSavedAt)}; saving replaces it.` : '.'}`;
-  $('login-user').value = ''; $('login-pass').value = ''; $('login-error').hidden = true;
+  $('login-user').value = ''; $('login-pass').value = ''; $('login-inbox').value = inst.inbox ?? ''; $('login-error').hidden = true;
+  $('login-inbox').placeholder = latest.codesInbox || 'the default inbox';
+  for (const id of ['login-user', 'login-pass']) $(id).placeholder = inst.loginSavedAt ? 'unchanged' : '';
   $('login-remove').hidden = !inst.loginSavedAt;
   $('login-dialog').showModal();
 }
@@ -312,7 +315,7 @@ async function sendLogin(body) {
   try { await post('/api/logins', { site: loginFor, ...body }); $('login-pass').value = ''; $('login-dialog').close(); showStanding(await api('/api/status')); }
   catch (e) { $('login-error').textContent = e.message; $('login-error').hidden = false; }
 }
-$('login-form').addEventListener('submit', (e) => { e.preventDefault(); sendLogin({ username: $('login-user').value.trim(), password: $('login-pass').value }); });
+$('login-form').addEventListener('submit', (e) => { e.preventDefault(); sendLogin({ username: $('login-user').value.trim(), password: $('login-pass').value, inbox: $('login-inbox').value.trim() }); });
 $('login-remove').addEventListener('click', () => sendLogin({ remove: true }));
 $('login-cancel').addEventListener('click', () => { $('login-pass').value = ''; $('login-dialog').close(); });
 $('inbox').addEventListener('input', () => { $('inbox').dataset.edited = '1'; });
