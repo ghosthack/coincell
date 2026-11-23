@@ -55,7 +55,7 @@ function onPage(step, data) {
   // whatever leads to more choices, then a tap in the site's phone app, then a texted code.
   const options = pass || code || user || push ? [] : [...document.querySelectorAll('input[type=radio]')].map((r) => ({ r, face: shown(r) ? r : [...(r.labels ?? [])].find(shown2), text: words(r) })).filter((o) => o.face);
   const KINDS = [['email', /e-?mail|@/i], ['more', /different way|another way|other (way|option|method)/i], ['push', /notification|push|\bapp\b/i], ['text', /\btext\b|sms/i]];
-  const choice = options.length >= 2 ? KINDS.map(([kind, re]) => ({ kind, o: options.find((o) => re.test(o.text)) })).find((c) => c.o) : null;
+  const choice = options.length >= 2 ? KINDS.filter(([kind]) => kind !== data?.avoid).map(([kind, re]) => ({ kind, o: options.find((o) => re.test(o.text)) })).find((c) => c.o) : null;
   if (step === 'look') return { has: pass ? 'password' : code ? 'code' : user ? 'user' : push ? 'push' : choice ? 'choose' : remember ? 'remember' : 'none', url: location.href,
     sig: choice ? options.map((o) => o.text.replace(/\d/g, '9').slice(0, 30)).join('|') : '' };
   if (step === 'choose' && choice) {
@@ -288,6 +288,8 @@ export async function signIn(site, tab, say, { whateverTheAddress = false } = {}
           if (r.pressed) presses++;
           await sleep(700);
         }
+        // A drop-down that would not take a pick: fall back to the next way on offer (usually a tap in the site's phone app).
+        if (picked === 'more') { picked = (await run('choose', { avoid: 'more' }).catch(() => []))[0]?.result?.picked ?? 'more'; trail.push(`fell back to ${picked}`); }
       }
       let went = false;
       for (let i = 0; i < 6 && !went; i++) { await sleep(600); went = Boolean((await run('go').catch(() => []))[0]?.result?.went); }
