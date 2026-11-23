@@ -129,12 +129,14 @@ window.loadInsights = async function loadInsights() {
   ], d.debt.cards, 'No credit cards.');
 };
 
-$('tabs').addEventListener('click', (e) => {
-  const tab = e.target.dataset.tab;
+const showTab = (e) => {
+  const tab = e.target.closest('[data-tab]')?.dataset.tab;
   if (!tab) return;
-  for (const b of $('tabs').children) b.setAttribute('aria-pressed', String(b.dataset.tab === tab));
+  for (const b of [...$('tabs').children, $('settings')]) b.setAttribute('aria-pressed', String(b.dataset.tab === tab));
   $('tab-overview').hidden = tab !== 'overview';
   $('tab-insights').hidden = tab !== 'insights';
   $('tab-settings').hidden = tab !== 'settings';
   if (tab === 'overview') drawChart(); else window.redrawCharts();
-});
+};
+$('tabs').addEventListener('click', showTab);
+$('settings').addEventListener('click', showTab);
