@@ -40,7 +40,7 @@ function onPage(step, data) {
       path: location.pathname.replace(/\d/g, '9').slice(0, 80), frames: document.querySelectorAll('iframe').length,
       headings: [...document.querySelectorAll('h1, h2, h3, legend, [role=heading]')].filter(shown2).slice(0, 8).map((h) => mask(h.textContent)),
       fields: [...document.querySelectorAll('input, select, textarea')].filter((i) => i.type !== 'hidden').slice(0, 20).map((i) => ({ type: i.type, name: mask(i.name), id: mask(i.id), autocomplete: i.autocomplete || undefined,
-        label: mask(i.labels?.[0]?.textContent || i.getAttribute('aria-label') || i.placeholder), shown: shown(i), within: i.type === 'radio' ? tagOf(i) : undefined, checked: i.type === 'radio' || i.type === 'checkbox' ? i.checked : undefined })),
+        label: mask(i.labels?.[0]?.textContent || i.getAttribute('aria-label') || i.placeholder), shown: shown(i), filled: ['radio', 'checkbox', 'button', 'submit'].includes(i.type) ? undefined : Boolean(i.value), within: i.type === 'radio' ? tagOf(i) : undefined, checked: i.type === 'radio' || i.type === 'checkbox' ? i.checked : undefined })),
       buttons: buttons(document).slice(0, 15).map((b) => mask(label(b))),
       nextButton: (() => { const b = [...document.querySelectorAll('button, [role=button]')].find((x) => /^next/i.test(label(x))); return b ? `${tagOf(b)} disabled=${b.disabled} aria-disabled=${b.getAttribute('aria-disabled')} type=${b.type}` : null; })(),
       alerts: [...document.querySelectorAll('[role=alert], .error, [aria-live=assertive]')].filter(shown2).map((e) => mask(e.textContent)).filter(Boolean).slice(0, 4),
@@ -317,4 +317,19 @@ export async function signIn(site, tab, say, { whateverTheAddress = false } = {}
     }
   }
   return { ok: false, message: UNKNOWN };
+}
+
+/** Record the layout (never the values) of whatever pages of this site are open, without doing anything to them. */
+export async function describe(site) {
+  const tabs = (await chrome.tabs.query({})).filter((t) => site.match.test(t.url ?? '') || site.signIn?.test(t.url ?? '') || site.loggedIn?.test(t.url ?? ''));
+  for (const tab of tabs) {
+    const frames = await chrome.scripting.executeScript({ target: { tabId: tab.id, allFrames: true }, func: onPage, args: ['outline', {}] }).catch(() => []);
+    for (const f of frames) {
+      const o = f.result;
+      if (!o || !((o.headings?.length ?? 0) + (o.buttons?.length ?? 0) + (o.fields?.filter((x) => x.shown).length ?? 0))) continue;
+      await fetch(`${TARGETS[site.target]}/api/recordings`, { method: 'POST', headers: { 'content-type': 'application/json', 'x-coincell': '1' },
+        body: JSON.stringify({ host: `${site.id}.signin`, entry: { kind: 'signin', at: new Date().toISOString(), version: chrome.runtime.getManifest().version, has: `described (frame ${f.frameId})`, outline: o } }) }).catch(() => {});
+    }
+  }
+  return tabs.length;
 }

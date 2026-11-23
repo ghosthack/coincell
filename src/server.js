@@ -147,6 +147,12 @@ const server = http.createServer(async (req, res) => {
         institutions: BANKS.map((b) => ({ id: b.id, name: b.name, asOf: asOf.get(b.id) ?? null, last: last.get(b.id) ?? null, progress: progressBy[b.id] ?? null, canSignIn: ext.signIn.includes(b.id), loginSavedAt: ext.signIn.includes(b.id) ? loginSavedAt(b.id) : null, makesCodes: ext.signIn.includes(b.id) && makesCodes(b.id), inbox: DEMO ? '' : siteInbox(b.id),
           readBy: ext.sites.includes(b.id) || b.viaExtension ? 'extension' : b.needsBrowser ? 'browser' : 'file' })) });
     }
+    if (route === 'POST /api/describe') {   // ask the extension to note the layout of the site's open pages, changing nothing
+      const { bank } = await readBody(req);
+      if (!BANKS.some((b) => b.id === bank)) return json(res, 400, { error: 'Unknown institution' });
+      command({ type: 'describe', site: bank });
+      return json(res, 202, { asked: true });
+    }
     if (route === 'POST /api/refresh') {
       // Each institution goes the way it can: through the extension in your own Chrome where the
       // extension knows the site, otherwise read directly from here.

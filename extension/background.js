@@ -1,6 +1,6 @@
 // Runs the site scripts in your tabs and hands what they collect to coincell on this computer.
 import { SITES, TARGETS, siteFor, targetFor } from './sites.js';
-import { signIn } from './signin.js';
+import { signIn, describe } from './signin.js';
 
 async function post(base, path, body) {
   let res;
@@ -260,6 +260,7 @@ async function listen(name) {
         const { reloadedFor } = await chrome.storage.local.get('reloadedFor');
         if (reloadedFor !== `${mine}>${cmd.want}`) { await chrome.storage.local.set({ reloadedFor: `${mine}>${cmd.want}` }); return chrome.runtime.reload(); }
       }
+      if (cmd.type === 'describe') { const site = SITES.find((s) => s.id === cmd.site && s.target === name && s.loggedIn); if (site) describe(site).catch(() => {}); }
       if (cmd.type === 'refresh') (async () => { for (const id of cmd.sites) { const site = SITES.find((s) => s.id === id && s.target === name && s.loggedIn); if (site) await refreshOne(site); } })();
     }
   } finally {
