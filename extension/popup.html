@@ -14,6 +14,10 @@
   .row > .label { white-space: nowrap; overflow: hidden; text-overflow: ellipsis; cursor: help; background: none; border: 0; padding: 0; height: auto; text-align: left; border-radius: 0; }
   .row > :last-child { justify-self: end; }
   .row button:not(.label), .boxed { width: 92px; box-sizing: border-box; }
+  .row .duo { display: grid; grid-template-columns: 1fr 32px; gap: 4px; width: 92px; } .row .duo button { width: auto; padding: 0; display: flex; align-items: center; justify-content: center; gap: 5px; }
+  .dot { width: 8px; height: 8px; border-radius: 50%; background: currentColor; } #record[aria-pressed="true"] .dot { background: #e5484d; }
+  #record[aria-pressed="true"] { border-color: #e5484d; opacity: 1; }
+  .bars { width: 3px; height: 10px; border: solid currentColor; border-width: 0 3px; }
   /* A checkbox dressed as the buttons around it: its word, then the box on the right. */
   .boxed { display: flex; align-items: center; justify-content: center; gap: 8px; height: 28px; border-radius: 7px; border: 1px solid color-mix(in srgb, CanvasText 25%, transparent); cursor: pointer; }
   .boxed input { margin: 0; width: 14px; height: 14px; }
@@ -35,7 +39,7 @@
   <div class="row"><button class="label" data-for="all-hint">All open sites</button><button id="send-all">Send all</button></div>
   <div class="detail" id="all-hint" hidden>Sends every site coincell knows that is open in a tab and logged in.</div>
   <div id="results" role="status"></div>
-  <div class="row"><button class="label" data-for="record-hint">Record this site</button><button id="record">Record</button></div>
+  <div class="row"><button class="label" data-for="record-hint">Site recorder</button><div class="duo"><button id="record" aria-pressed="false" title="Record this site"><i class="dot"></i>Rec</button><button id="pause" aria-label="Pause recording" title="Pause recording" disabled><i class="bars"></i></button></div></div>
   <div class="detail" id="record-hint" hidden>Recording teaches coincell how a new site is built. It keeps the layout of pages and data, never the values.</div>
   <div class="row"><button class="label" data-for="sync-hint">When I log in to a site</button><label class="boxed">Read<input type="checkbox" id="auto-sync" aria-label="Read a site when I log in to it"></label></div>
   <div class="detail" id="sync-hint" hidden>Logging in to a site coincell knows is the cue to read it, at most once every 15 minutes.</div>

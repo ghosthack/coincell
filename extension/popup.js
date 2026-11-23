@@ -21,7 +21,7 @@ const origin = isWeb ? new URL(tab.url).origin : null;
 $('site').textContent = site ? site.name : isWeb ? `${new URL(tab.url).hostname} (not known yet)` : 'No website in this tab';
 $('hint').textContent = site ? (site.capture ? 'Log in first. This tab will move through the pages it needs by itself.' : 'Log in to the site first if you have not.') : isWeb ? 'coincell does not know this site yet. Record it so a script can be written.' : '';
 $('send').disabled = !site;
-$('record').disabled = !isWeb;
+
 
 function show(results) {
   $('results').replaceChildren(...results.map((r) => {
@@ -52,14 +52,21 @@ const paintAllow = async () => { if (await chrome.permissions.contains({ origins
 paintAllow();
 $('allow').addEventListener('click', async () => { await chrome.permissions.request({ origins: needed }); paintAllow(); });
 
+// The site recorder: Rec starts it, Pause stops it for now; Rec again carries on in the same recording.
 let recording = Boolean(origin && ((await chrome.storage.local.get('recording')).recording ?? {})[origin]);
+const HOW = $('record-hint').textContent;
 const paint = () => {
-  $('record').textContent = recording ? 'Stop' : 'Record';
-  if (recording) { $('record-hint').textContent = 'Recording. Open your accounts, positions and activity pages, then stop. Values are never kept.'; $('record-hint').hidden = false; document.querySelector('[data-for="record-hint"]').textContent = 'Recording this site'; }
+  $('record').setAttribute('aria-pressed', String(recording));
+  $('record').disabled = !isWeb || recording;   // already recording: nothing to start
+  $('pause').disabled = !recording;             // nothing to pause unless it is recording
+  $('record-hint').textContent = recording ? 'Recording. Open your accounts, positions and activity pages, then pause. Values are never kept.' : HOW;
+  if (recording) $('record-hint').hidden = false;
 };
 paint();
-$('record').addEventListener('click', async () => {
-  if (!recording && !(await chrome.permissions.request({ origins: [`${origin}/*`] }))) return;   // Chrome asks you to allow this one site
-  const out = await chrome.runtime.sendMessage({ type: 'record', tabId: tab.id, on: !recording });
+const setRecording = async (on) => {
+  if (on && !(await chrome.permissions.request({ origins: [`${origin}/*`] }))) return;   // Chrome asks you to allow this one site
+  const out = await chrome.runtime.sendMessage({ type: 'record', tabId: tab.id, on });
   if (out?.ok) { recording = out.recording; paint(); }
-});
+};
+$('record').addEventListener('click', () => setRecording(true));
+$('pause').addEventListener('click', () => setRecording(false));

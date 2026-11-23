@@ -148,10 +148,11 @@ try {
 
   // Recording: the layout of a site, none of its values.
   const tabId = await worker.evaluate(async () => (await chrome.tabs.query({ url: 'http://localhost:4702/*' }))[0].id);
-  p = await popup(`?tab=${tabId}`); await p.click('#record'); await p.waitForFunction(() => /Stop/.test(document.getElementById('record').textContent));
+  p = await popup(`?tab=${tabId}`); if (!(await p.locator('#pause').isDisabled())) fail('Pause should be greyed out while nothing is recording');
+  await p.click('#record'); await p.waitForSelector('#pause:not([disabled])');
   await tabs[4702].goto('http://localhost:4702/logout'); await logins[4702](tabs[4702]);   // a login while recording: the password must not be kept
   await tabs[4702].waitForTimeout(3500);
-  await p.click('#record'); await p.close();
+  await p.click('#pause'); await p.waitForSelector('#pause[disabled]'); await p.close();
   const file = path.join(env.COINCELL_DATA, 'recordings', 'localhost.extension.jsonl');
   const recorded = fs.existsSync(file) ? fs.readFileSync(file, 'utf8') : '';
   const entries = recorded.trim().split('\n').filter(Boolean).map((l) => JSON.parse(l));
