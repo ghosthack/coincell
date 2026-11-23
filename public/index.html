@@ -79,6 +79,7 @@
   button.icon { display: inline-flex; align-items: center; gap: 6px; }
   button.icon svg { width: 14px; height: 14px; fill: none; stroke: currentColor; stroke-width: 1.5; stroke-linecap: round; stroke-linejoin: round; }
   #settings[aria-pressed="true"] { background: var(--grid); font-weight: 600; }
+  #logins button { width: 104px; }   /* one width, whatever the button says */
   button.small { height: 26px; padding: 0 9px; font-size: 12px; }
   input[type=text], input[type=email], input[type=password], input:not([type]) { font: inherit; color: inherit; background: var(--surface-1); border: 1px solid var(--border); border-radius: 7px; height: 30px; padding: 0 9px; box-sizing: border-box; }
   p.bad { color: var(--critical); }
@@ -197,11 +198,6 @@
     <div class="card-head"><h2>Signing in for you</h2><span class="sub" id="store-note"></span></div>
     <p class="foot" style="margin:0 0 10px">With a login saved here, a refresh that finds a site logged out signs in by itself, on that site's own sign-in page.</p>
     <div class="scroll" id="logins"></div>
-    <form class="foot inline-form" id="inbox-form">
-      <label for="inbox" title="All sign-in codes should arrive in one Gmail inbox, signed in to in the same Chrome as the extension. Used for every institution that does not name its own inbox. Leave it empty to use the first Gmail account that Chrome is signed in to.">Default Gmail inbox for sign-in codes (optional)</label>
-      <input id="inbox" type="email" placeholder="the only Gmail signed in" autocomplete="off" spellcheck="false">
-      <button class="small">Save</button><span class="muted" id="inbox-note"></span>
-    </form>
   </section>
   </div>
 
@@ -287,9 +283,9 @@
   <form method="dialog" id="login-form">
     <h2 id="login-title">Saved login</h2>
     <p class="muted" id="login-note"></p>
-    <label for="login-user">Username</label><input id="login-user" autocomplete="off" spellcheck="false" autocapitalize="off">
-    <label for="login-pass">Password</label><input id="login-pass" type="password" autocomplete="new-password">
-<label for="login-inbox" title="The Gmail inbox this institution's sign-in codes arrive in, if it is not the default one. It must be signed in to in the same Chrome as the extension.">Gmail inbox its codes arrive in (optional)</label><input id="login-inbox" type="email" autocomplete="off" spellcheck="false">
+    <div id="login-fields"><label for="login-user">Username</label><input id="login-user" autocomplete="off" spellcheck="false" autocapitalize="off">
+    <label for="login-pass">Password</label><input id="login-pass" type="password" autocomplete="new-password"></div>
+<label for="login-inbox" id="login-inbox-label">Gmail inbox its codes arrive in (optional)</label><input id="login-inbox" type="email" autocomplete="off" spellcheck="false">
     <p class="bad" id="login-error" role="alert" hidden></p>
     <div class="dialog-actions"><button type="button" id="login-remove">Remove saved login</button><span></span><button type="button" id="login-cancel">Cancel</button><button class="primary" id="login-save">Save</button></div>
   </form>

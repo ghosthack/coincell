@@ -268,12 +268,11 @@ function showStanding(st) {
   // Settings: one row per institution the extension can sign in to.
   table($('logins'), [
     { label: 'Institution', get: (r) => r.name },
-    { label: 'Saved login', get: (r) => (r.loginSavedAt ? `Saved ${ago(r.loginSavedAt)}` : 'None'), cls: 'muted' },
-    { label: 'Codes arrive in', get: (r) => r.inbox || (st.codesInbox ? `${st.codesInbox} (default)` : 'The default inbox'), cls: 'muted' },
-    { label: '', num: true, get: (r) => el('button', { class: 'small', 'data-login': r.id }, r.loginSavedAt ? 'Change' : 'Save a login…') },
-  ], st.institutions.filter((i) => i.canSignIn), st.extension ? 'The extension cannot sign in to any of your institutions yet.' : 'Open Chrome with the coincell extension loaded to set this up.');
+    { label: 'Saved login', get: (r) => (r.isDefault ? '–' : r.loginSavedAt ? `Saved ${ago(r.loginSavedAt)}` : 'None'), cls: 'muted' },
+    { label: 'Codes arrive in', get: (r) => (r.isDefault ? st.codesInbox || 'The first Gmail signed in to in Chrome' : r.inbox || 'Default inbox'), cls: 'muted' },
+    { label: '', num: true, get: (r) => el('button', { class: 'small', 'data-login': r.id }, r.isDefault || r.loginSavedAt ? 'Change' : 'Save a login…') },
+  ], st.institutions.some((i) => i.canSignIn) ? [{ id: DEFAULT, name: 'Default inbox', isDefault: true }, ...st.institutions.filter((i) => i.canSignIn)] : [], st.extension ? 'The extension cannot sign in to any of your institutions yet.' : 'Open Chrome with the coincell extension loaded to set this up.');
   $('store-note').textContent = `Logins are kept in ${st.loginStore}.`;
-  if (document.activeElement !== $('inbox') && !$('inbox').dataset.edited) $('inbox').value = st.codesInbox;
   const busy = st.institutions.filter((i) => ['queued', 'working'].includes(i.progress?.state)).length;
   const login = st.institutions.filter((i) => i.progress?.state === 'needs-login').map((i) => i.name);
   const stale = st.institutions.map((i) => i.last?.at).filter(Boolean).sort()[0];
@@ -300,9 +299,21 @@ $('logins').addEventListener('click', (e) => { if (e.target.dataset.login) askLo
 // A login typed here goes to coincell on this computer and from there only to the extension, to be
 // filled in on that institution's own sign-in page. It is never shown again, here or anywhere.
 let latest = null, loginFor = null;
+const DEFAULT = '_default';   // the row for the default inbox, which has no login of its own
 function askLogin(id) {
-  const inst = latest.institutions.find((i) => i.id === id);
   loginFor = id;
+  $('login-fields').hidden = id === DEFAULT;
+  $('login-error').hidden = true;
+  if (id === DEFAULT) {
+    $('login-title').textContent = 'Default inbox for sign-in codes';
+    $('login-note').textContent = 'Used for every institution that does not name its own. Leave it empty to use the first Gmail account that Chrome is signed in to.';
+    $('login-inbox-label').textContent = 'Gmail inbox';
+    $('login-inbox').value = latest.codesInbox; $('login-inbox').placeholder = 'the first Gmail signed in to';
+    $('login-remove').hidden = true;
+    return $('login-dialog').showModal();
+  }
+  $('login-inbox-label').textContent = 'Gmail inbox its codes arrive in (optional)';
+  const inst = latest.institutions.find((i) => i.id === id);
   $('login-title').textContent = `Login for ${inst.name}`;
   $('login-note').textContent = `Kept in ${latest.loginStore}${inst.loginSavedAt ? `. One was saved ${ago(inst.loginSavedAt)}; saving replaces it.` : '.'}`;
   $('login-user').value = ''; $('login-pass').value = ''; $('login-inbox').value = inst.inbox ?? ''; $('login-error').hidden = true;
@@ -312,17 +323,12 @@ function askLogin(id) {
   $('login-dialog').showModal();
 }
 async function sendLogin(body) {
-  try { await post('/api/logins', { site: loginFor, ...body }); $('login-pass').value = ''; $('login-dialog').close(); showStanding(await api('/api/status')); }
+  try { if (loginFor === DEFAULT) await post('/api/settings', { codesInbox: body.inbox }); else await post('/api/logins', { site: loginFor, ...body }); $('login-pass').value = ''; $('login-dialog').close(); showStanding(await api('/api/status')); }
   catch (e) { $('login-error').textContent = e.message; $('login-error').hidden = false; }
 }
 $('login-form').addEventListener('submit', (e) => { e.preventDefault(); sendLogin({ username: $('login-user').value.trim(), password: $('login-pass').value, inbox: $('login-inbox').value.trim() }); });
 $('login-remove').addEventListener('click', () => sendLogin({ remove: true }));
 $('login-cancel').addEventListener('click', () => { $('login-pass').value = ''; $('login-dialog').close(); });
-$('inbox').addEventListener('input', () => { $('inbox').dataset.edited = '1'; });
-$('inbox-form').addEventListener('submit', async (e) => {
-  e.preventDefault();
-  try { await post('/api/settings', { codesInbox: $('inbox').value.trim() }); delete $('inbox').dataset.edited; $('inbox-note').textContent = 'Saved.'; } catch (err) { $('inbox-note').textContent = err.message; }
-});
 $('range').addEventListener('click', (e) => { if (e.target.dataset.days != null) setRange(Number(e.target.dataset.days)); });
 $('txn-account').addEventListener('change', loadTransactions);
 const setMode = (mode) => { nwMode = mode; localStorage.setItem('nwMode', mode); for (const b of $('nw-mode').children) b.setAttribute('aria-pressed', String(b.dataset.mode === mode)); drawChart(); };
