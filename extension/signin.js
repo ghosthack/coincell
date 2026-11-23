@@ -203,12 +203,13 @@ export async function signIn(site, tab, say, { whateverTheAddress = false } = {}
 
   // A sign-in form may sit in a frame inside the page. Every frame is looked at, but only the page
   // itself or a frame served from this site's own addresses is ever acted on.
-  let frame = 0;
+  let frame = 0, actedFrame = 0, frameGone = false;   // actedFrame: the frame the sign-in form was in; once it is gone, the sign-in is over
   const run = (step, data = {}) => chrome.scripting.executeScript({ target: { tabId: tab.id, frameIds: [frame] }, func: onPage, args: [step, data] });
   const look = async () => {
     try {
-      const seen = (await chrome.scripting.executeScript({ target: { tabId: tab.id, allFrames: true }, func: onPage, args: ['look', {}] }))
-        .map((r) => ({ frameId: r.frameId, ...r.result })).filter((f) => f.has && f.has !== 'none' && (f.frameId === 0 || site.signIn.test(f.url ?? '') || site.loggedIn.test(f.url ?? '')));
+      const every = await chrome.scripting.executeScript({ target: { tabId: tab.id, allFrames: true }, func: onPage, args: ['look', {}] });
+      frameGone = actedFrame !== 0 && !every.some((r) => r.frameId === actedFrame);
+      const seen = every.map((r) => ({ frameId: r.frameId, ...r.result })).filter((f) => f.has && f.has !== 'none' && (f.frameId === 0 || site.signIn.test(f.url ?? '') || site.loggedIn.test(f.url ?? '')));
       const pick = seen.find((f) => f.frameId === 0) ?? seen[0];
       frame = pick?.frameId ?? 0;
       return pick?.has === 'choose' ? `choose ${pick.sig}` : pick?.has ?? 'none';   // each page of choices counts as its own step
@@ -235,7 +236,8 @@ export async function signIn(site, tab, say, { whateverTheAddress = false } = {}
     // form (whateverTheAddress), you are in once something was filled in and the page has had nothing
     // more to fill in for a few looks.
     const inByAddress = site.loggedIn.test(now.url ?? '');
-    if (inByAddress && whateverTheAddress && !(acted.size && calm >= 4)) { /* keep looking at the page */ } else
+    // (If the form was in a frame, that frame going away is the sign; a page that merely has nothing to fill in may be waiting for you.)
+    if (inByAddress && whateverTheAddress && !(acted.size && (actedFrame ? frameGone : calm >= 4))) { /* keep looking at the page */ } else
     if (inByAddress) {
       if (whateverTheAddress) { lastNoted = ''; await note('taken as logged in'); }
       if (rejected[key]) { delete rejected[key]; await chrome.storage.local.set({ rejected }); }
@@ -299,7 +301,7 @@ export async function signIn(site, tab, say, { whateverTheAddress = false } = {}
       since = Date.now();
     }
     if (has === 'remember') await run('remember');
-    acted.add(has);
+    acted.add(has); if (frame) actedFrame = frame;
     // Give the site time to move on: until it shows something else, for up to 20 seconds.
     for (const until = Date.now() + 20_000; Date.now() < until; await sleep(600)) {
       const t = await chrome.tabs.get(tab.id);
