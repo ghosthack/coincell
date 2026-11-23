@@ -240,7 +240,7 @@ async function listen(name) {
   try {
     for (;;) {
       const canSignIn = [...new Set(SITES.filter((s) => s.target === name && s.signIn).map((s) => s.id))];
-      const res = await fetch(`${TARGETS[name]}/ext/poll?sites=${ids.join(',')}&signin=${canSignIn.join(',')}`, { headers: { 'x-coincell': '1' } }).catch(() => null);
+      const res = await fetch(`${TARGETS[name]}/ext/poll?sites=${ids.join(',')}&signin=${canSignIn.join(',')}&v=${chrome.runtime.getManifest().version}`, { headers: { 'x-coincell': '1' } }).catch(() => null);
       if (!res?.ok) break;   // coincell is not running there; the alarm below tries again
       const cmd = await res.json().catch(() => ({}));
       if (cmd.type === 'refresh') (async () => { for (const id of cmd.sites) { const site = SITES.find((s) => s.id === id && s.target === name && s.loggedIn); if (site) await refreshOne(site); } })();
@@ -254,7 +254,6 @@ chrome.alarms.create('listen', { periodInMinutes: 0.5 });   // the browser puts 
 chrome.alarms.onAlarm.addListener(listenAll);
 chrome.runtime.onStartup.addListener(listenAll);
 chrome.runtime.onInstalled.addListener(listenAll);
-chrome.runtime.onInstalled.addListener(() => chrome.storage.local.remove('rejected'));   // a new version may fill a form differently: saved logins get a fresh try
 listenAll();
 
 // Sync when you log in: landing on a site's logged-in pages is the cue to read it, unless it was

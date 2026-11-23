@@ -106,7 +106,9 @@ export async function signIn(site, tab, say) {
   if (!login.username) return { ok: false, message: login.error };   // no saved login: you log in, as before
   // plainFill is a switch for the tests only: it leaves out the add-and-remove step, to show the careless fake sites do refuse without it.
   const { rejected = {}, plainFill = false } = await chrome.storage.local.get(['rejected', 'plainFill']);
-  if (rejected[key] === login.savedAt) return { ok: false, message: 'The saved login was not accepted last time, so it was not tried again. Log in yourself, or save the login again.' };
+  // The mark names the login and the extension version that failed with it: a newer login or a newer extension gets a fresh try.
+  const mark = `${login.savedAt} by ${chrome.runtime.getManifest().version}`;
+  if (rejected[key] === mark) return { ok: false, message: 'The saved login was not accepted last time, so it was not tried again. Log in yourself, or save the login again.' };
 
   const run = (step, data = {}) => chrome.scripting.executeScript({ target: { tabId: tab.id }, func: onPage, args: [step, data] });
   const look = async () => { try { return (await run('look'))[0]?.result?.has ?? 'none'; } catch (e) { return /cannot access|permission/i.test(e.message) ? 'blocked' : 'none'; } };
@@ -128,7 +130,7 @@ export async function signIn(site, tab, say) {
     }
     quiet = 0;
     if (acted.has(has)) {   // answered this already, and the site is asking again
-      if (has === 'password') { await chrome.storage.local.set({ rejected: { ...rejected, [key]: login.savedAt } }); return { ok: false, message: 'The site did not let the saved login through. It will not be tried again until you save it anew, or log in yourself.' }; }
+      if (has === 'password') { await chrome.storage.local.set({ rejected: { ...rejected, [key]: mark } }); return { ok: false, message: 'The site did not let the saved login through. It will not be tried again until you save it anew, or log in yourself.' }; }
       return { ok: false, message: has === 'code' ? 'The site did not accept the emailed code. Enter it yourself.' : UNKNOWN };
     }
     if (!shown) { await front(); shown = true; }

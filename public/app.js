@@ -285,7 +285,7 @@ function standing(i) {   // one phrase for where an institution stands, with a m
 }
 
 function showStanding(st) {
-  $('ext-note').textContent = st.institutions.some((i) => i.readBy === 'extension') ? (st.extension ? 'Browser extension connected.' : 'Browser extension not connected: open Chrome with the coincell extension loaded.') : '';
+  $('ext-note').textContent = st.institutions.some((i) => i.readBy === 'extension') ? (st.extension ? `Browser extension ${st.extensionVersion ?? ''} connected.` : 'Browser extension not connected: open Chrome with the coincell extension loaded.') : '';
   table($('institutions'), [
     { label: 'Institution', get: (r) => r.name },
     { label: 'Read through', get: (r) => READ_BY[r.readBy], cls: 'muted' },

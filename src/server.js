@@ -78,7 +78,7 @@ const server = http.createServer(async (req, res) => {
     }
     // ---- the bridge (see bridge.js) ----
     if (url.pathname.startsWith('/ext/') && req.headers['x-coincell'] !== '1') return json(res, 403, { error: 'Forbidden' });   // pages cannot send this header
-    if (route === 'GET /ext/poll') return poll(res, url.searchParams.get('sites')?.split(',').filter(Boolean), url.searchParams.get('signin')?.split(',').filter(Boolean), (cmd) => json(res, 200, cmd));
+    if (route === 'GET /ext/poll') return poll(res, url.searchParams.get('sites')?.split(',').filter(Boolean), url.searchParams.get('signin')?.split(',').filter(Boolean), url.searchParams.get('v'), (cmd) => json(res, 200, cmd));
     if (route === 'POST /ext/progress') {
       const { site, state: s, message, warnings } = await readBody(req);
       if (BANKS.some((b) => b.id === site)) setProgress(site, s, message, warnings);
@@ -109,7 +109,7 @@ const server = http.createServer(async (req, res) => {
     }
     if (route === 'GET /api/status') {
       const { asOf, last } = getImports(), ext = extension();
-      return json(res, 200, { extension: ext.connected, active: active() || state.running, loginStore: storeName, codesInbox: DEMO ? codesInbox().address : getSettings().codesInbox ?? '',
+      return json(res, 200, { extension: ext.connected, extensionVersion: ext.version, active: active() || state.running, loginStore: storeName, codesInbox: DEMO ? codesInbox().address : getSettings().codesInbox ?? '',
         institutions: BANKS.map((b) => ({ id: b.id, name: b.name, asOf: asOf.get(b.id) ?? null, last: last.get(b.id) ?? null, progress: progressBy[b.id] ?? null, canSignIn: ext.signIn.includes(b.id), loginSavedAt: ext.signIn.includes(b.id) ? loginSavedAt(b.id) : null, inbox: DEMO ? '' : siteInbox(b.id),
           readBy: ext.sites.includes(b.id) || b.viaExtension ? 'extension' : b.needsBrowser ? 'browser' : 'file' })) });
     }
