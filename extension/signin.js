@@ -141,7 +141,7 @@ function onPage(step, data) {
     const button = named ?? inForm[0];
     if (button) button.click(); else el.form?.requestSubmit();
   };
-  if (step === 'user' && user) { put(user, data.username); if (data.nudge !== false) nudge(user); send(user); }
+  if (step === 'user' && user) { put(user, data.username); if (!user.value) keyed(user, data.username); else nudge(user); send(user); }
   if (step === 'password' && pass) {
     // The username gets the same add-and-remove treatment as the password: some forms only take in a field that saw keys pressed.
     // `trace` says, step by step, whether each field held something (never what), for working out a form that drops a value.

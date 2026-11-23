@@ -9,7 +9,7 @@ export default {
     await page.goto(`${URL}/portfolio`);
     if (page.url().includes('/login')) {
       log('Logging in (username, then password)');
-      await page.fill('#username', 'demo');
+      await page.locator('#username').pressSequentially('demo');   // key by key: this box ignores a value set in one go
       await page.click('#next');
       await page.fill('#password', 'meridian-demo');
       await page.click('#log-in');

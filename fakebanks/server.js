@@ -6,7 +6,8 @@
 //                          then a code from an authenticator app
 //   4703 Copperleaf Card   server-rendered, an approval sent to its phone app, "remember this device" step, CSV download; a login form that
 //                          refuses a passcode unless its field was clicked into and typed in
-//   4704 Meridian Wealth   two-step login, then a texted code; JSON API behind the session cookie
+//   4704 Meridian Wealth   two-step login with a username box that masks what is typed and throws away
+//                          anything not typed key by key, then a texted code; JSON API behind the session cookie
 //   4705 Lakeshore Home Loans  password + security question, payment history split into principal/interest/escrow
 //   4706 Demo Mail         the inbox the fake sites email their codes to, with the same feed Gmail offers
 import http from 'node:http';
@@ -268,8 +269,16 @@ createSite({ port: 4704, name: 'Meridian Wealth', color: '#1d6b45', handler: (c)
   if (path === '/logout') { c.end(); return c.redirect('/login'); }
   if (path === '/login') {
     if (method === 'POST') { c.start({ user: form.username, stage: 'password' }); return c.redirect('/login/password'); }
-    return c.html(`<div class="box"><h2>Log in</h2><form method="post" action="/login"><label>Username<input name="username" id="username"></label><button id="next">Next</button></form>
-      <p>Demo login: <code>demo</code> / <code>meridian-demo</code></p></div>`);
+    return c.html(`<div class="box"><h2>Log in</h2><form method="post" action="/login"><label>Username<input id="username" autocomplete="off"><input type="hidden" name="username" id="real-username"></label><button id="next">Next</button></form>
+      <p>Demo login: <code>demo</code> / <code>meridian-demo</code></p></div>
+      <script>
+        // The box shows dots and keeps the real username to itself, built from the keys pressed.
+        // A value put into the box any other way is thrown away, as some real sites do.
+        const box = document.getElementById('username'), real = document.getElementById('real-username'), dots = () => { box.value = '•'.repeat(real.value.length); };
+        box.addEventListener('keypress', (e) => { if (e.key.length === 1) { e.preventDefault(); real.value += e.key; dots(); } });
+        box.addEventListener('keydown', (e) => { if (e.key === 'Backspace') { e.preventDefault(); real.value = real.value.slice(0, -1); dots(); } });
+        box.addEventListener('input', dots);
+      </script>`);
   }
   if (path === '/login/password') {
     if (!session) return c.redirect('/login');
