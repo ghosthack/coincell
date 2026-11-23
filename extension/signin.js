@@ -64,6 +64,22 @@ function onPage(step, data) {
     choice.o.r.dispatchEvent(new Event('change', { bubbles: true }));
     return { picked: choice.kind };
   }
+  // After a choice, some pages show a drop-down asking where to send the code. Prefer email, then a text.
+  // One call opens the drop-down if it is closed, the next picks from it.
+  if (step === 'contact') {
+    const native = [...document.querySelectorAll('select')].filter(shown).find((sel) => [...sel.options].some((o) => /e-?mail|text/i.test(o.textContent)));
+    if (native) {
+      const opt = [...native.options].find((o) => /e-?mail/i.test(o.textContent)) ?? [...native.options].find((o) => /text/i.test(o.textContent));
+      native.value = opt.value; native.dispatchEvent(new Event('change', { bubbles: true }));
+      return { picked: /e-?mail/i.test(opt.textContent) ? 'email' : 'text' };
+    }
+    const items = [...document.querySelectorAll('[role=option], [role=menuitem], li, li a, li span')].filter(shown2).filter((e) => e.textContent.trim().length < 60);
+    const item = items.find((e) => /^\s*e-?mail/i.test(e.textContent)) ?? items.find((e) => /^\s*text/i.test(e.textContent));
+    if (item) { item.click(); return { picked: /e-?mail/i.test(item.textContent) ? 'email' : 'text' }; }
+    const opener = [...document.querySelectorAll('[aria-haspopup], [role=combobox], [id*="select" i], [id*="dropdown" i]')].filter(shown2).find((e) => !e.matches('input[type=radio], input[type=checkbox]'));
+    if (opener) { opener.click(); return { opened: true }; }
+    return { nothing: true };
+  }
   // Going on is a step of its own: pages often enable the button only once a choice has registered.
   if (step === 'go') { const next = buttons(document).find((b) => /^(next|continue|send|submit|confirm)/i.test(label(b))); if (next) next.click(); return { went: Boolean(next) }; }
 
@@ -241,7 +257,16 @@ export async function signIn(site, tab, say, { whateverTheAddress = false } = {}
       patience = 260;
     }
     if (has.startsWith('choose')) {
-      const picked = (await run('choose'))[0]?.result?.picked;
+      let picked = (await run('choose'))[0]?.result?.picked;
+      if (picked === 'more') {   // "another way" may open a drop-down of ways: pick from it
+        await sleep(900);
+        for (let i = 0; i < 6; i++) {
+          const r = (await run('contact').catch(() => []))[0]?.result ?? {};
+          if (r.picked) { picked = r.picked; break; }
+          if (r.nothing) break;
+          await sleep(700);
+        }
+      }
       let went = false;
       for (let i = 0; i < 6 && !went; i++) { await sleep(600); went = Boolean((await run('go').catch(() => []))[0]?.result?.went); }
       await sleep(1500); await note(`after choosing ${picked} (next pressed: ${went})`);
