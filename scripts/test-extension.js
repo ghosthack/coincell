@@ -43,7 +43,7 @@ try {
   const logins = {
     4701: async (t) => { await t.fill('#username', 'demo'); await t.fill('#password', 'harbor-demo'); await t.click('#sign-in'); await t.fill('#code', (await (await fetch('http://localhost:4706/mail/u/0/feed/atom')).text()).match(/security code is (\d{6})/)[1]); await t.click('#verify'); await t.waitForSelector('.acct'); },
     4702: async (t) => { await t.fill('#user-id', 'demo'); await t.locator('#pass').pressSequentially('kestrel-demo'); await t.click('#login-form button'); await t.fill('#totp-code', totp(await t.locator('#demo-key').innerText()).code); await t.click('#code-form button'); await t.waitForSelector('#card-summary'); },
-    4703: async (t) => { await t.fill('input[name="userId"]', 'demo'); await t.locator('input[name="passcode"]').pressSequentially('copper-demo'); await t.click('button[type="submit"]'); await t.click('#not-now'); await t.waitForSelector('[data-field="current-balance"]'); },
+    4703: async (t) => { await t.fill('input[name="userId"]', 'demo'); await t.locator('input[name="passcode"]').pressSequentially('copper-demo'); await t.click('button[type="submit"]'); await t.click('#send-push'); await t.click('#not-now', { timeout: 20_000 }); await t.waitForSelector('[data-field="current-balance"]'); },
     4704: async (t) => { await t.fill('#username', 'demo'); await t.click('#next'); await t.fill('#password', 'meridian-demo'); await t.click('#log-in'); await t.fill('#code', await t.locator('#demo-code').innerText()); await t.click('#verify'); await t.waitForSelector('#portfolio'); },
     4705: async (t) => { await t.fill('#user', 'demo'); await t.fill('#pw', 'lakeshore-demo'); await t.click('#signin'); await t.fill('#answer', await t.locator('#demo-answer').innerText()); await t.click('#continue'); await t.waitForSelector('#loan-summary'); },
   };
@@ -96,7 +96,7 @@ try {
   // Saved logins: with every site logged out, a refresh signs in by itself where it can.
   //   Harborline emails a code, Kestrel's form only notices an edited password and then wants an
   //   authenticator code (made by coincell from the setup key), Copperleaf asks to
-  //   remember the device, Meridian asks for the username and password on separate pages and then
+  //   approve on its phone app and then to remember the device, Meridian asks for the username and password on separate pages and then
   //   texts a code (typed on the dashboard, as you would from your phone), and Lakeshore asks a
   //   security question, which nothing here can answer.
   const passwords = { harborline: 'harbor-demo', kestrel: 'kestrel-demo', copperleaf: 'copper-demo', meridian: 'meridian-demo', lakeshore: 'lakeshore-demo' };

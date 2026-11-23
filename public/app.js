@@ -277,6 +277,7 @@ function standing(i) {   // one phrase for where an institution stands, with a m
   const p = i.progress;
   if (p?.state === 'queued' || p?.state === 'working') return [el('span', { class: 'mark' }, '… '), p.message || 'Working'];
   if (p?.state === 'needs-code') return [el('span', { class: 'mark' }, '→ '), 'Needs a code: enter it under Settings'];
+  if (p?.state === 'needs-approval') return [el('span', { class: 'mark' }, '→ '), p.message];
   if (p?.state === 'needs-login') return [el('span', { class: 'mark' }, '→ '), 'Needs a login in Chrome'];
   if (p?.state === 'failed') return [el('span', { class: 'mark bad' }, '✕ '), p.message];
   if (!i.last) return [el('span', { class: 'muted' }, 'Never read')];
@@ -310,7 +311,8 @@ function showStanding(st) {
   const code = st.institutions.filter((i) => i.progress?.state === 'needs-code').map((i) => i.name);
   const stale = st.institutions.map((i) => i.last?.at).filter(Boolean).sort()[0];
   $('refresh').disabled = st.active;
-  $('status').textContent = code.length ? `${code.join(', ')} needs a code: enter it under Settings` : busy ? `Refreshing ${busy} of ${st.institutions.length}…` : login.length ? `Log in to ${login.join(', ')} in Chrome` : stale ? `Oldest refresh ${ago(stale)}` : '';
+  const approve = st.institutions.filter((i) => i.progress?.state === 'needs-approval').map((i) => i.name);
+  $('status').textContent = approve.length ? `Approve the ${approve.join(', ')} sign-in on your phone` : code.length ? `${code.join(', ')} needs a code: enter it under Settings` : busy ? `Refreshing ${busy} of ${st.institutions.length}…` : login.length ? `Log in to ${login.join(', ')} in Chrome` : stale ? `Oldest refresh ${ago(stale)}` : '';
 }
 
 async function watch() {   // follow a refresh to its end, then show the new numbers

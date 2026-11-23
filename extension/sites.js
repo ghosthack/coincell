@@ -49,7 +49,7 @@ export const SITES = [
     signIn: /^http:\/\/localhost:4702\/login/ },
   { id: 'copperleaf', name: 'Copperleaf Card (demo)', match: /^http:\/\/localhost:4703\//, file: 'sites/demo/copperleaf.js', target: 'demo',
     home: 'http://localhost:4703/overview', loggedIn: /^http:\/\/localhost:4703\/overview/,
-    signIn: /^http:\/\/localhost:4703\/(login|remember)/ },
+    signIn: /^http:\/\/localhost:4703\/(login|push|remember)/ },
   { id: 'meridian', name: 'Meridian Wealth (demo)', match: /^http:\/\/localhost:4704\//, file: 'sites/demo/meridian.js', target: 'demo',
     home: 'http://localhost:4704/portfolio', loggedIn: /^http:\/\/localhost:4704\/portfolio/,
     signIn: /^http:\/\/localhost:4704\/login/ },

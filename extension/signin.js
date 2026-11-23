@@ -43,7 +43,9 @@ function onPage(step, data) {
       links: [...document.querySelectorAll('a')].filter(shown2).slice(0, 15).map((a) => mask(a.textContent)).filter(Boolean),
     };
   }
-  if (step === 'look') return { has: pass ? 'password' : code ? 'code' : user ? 'user' : remember ? 'remember' : 'none' };
+  // A page offering to send an approval to the site's phone app.
+  const push = pass || code || user ? null : buttons(document).find((b) => /^send (a |the )?(push )?notification/i.test(label(b)));
+  if (step === 'look') return { has: pass ? 'password' : code ? 'code' : user ? 'user' : push ? 'push' : remember ? 'remember' : 'none' };
 
   const told = (el, inputType, text) => el.dispatchEvent(new InputEvent('input', { bubbles: true, inputType, data: text ?? null }));
   // In a tab you are not looking at, the browser holds back the "focus" notice, so the page is told directly.
@@ -73,16 +75,20 @@ function onPage(step, data) {
     put(pass, data.password); if (data.nudge) nudge(pass); send(pass);
   }
   if (step === 'code' && code) {
-    // "Remember this device", where offered, means fewer codes later.
-    // The real checkbox is often hidden behind a styled label, so it is ticked through its label when that is what shows.
+    tickRemember();
+    put(code, data.code); send(code);
+  }
+  // "Remember this device", where offered, means fewer codes and approvals later.
+  // The real checkbox is often hidden behind a styled label, so it is ticked through its label when that is what shows.
+  function tickRemember() {
     for (const box of document.querySelectorAll('input[type=checkbox]')) {
       if (box.checked || box.disabled || !/remember (this|my) (device|computer|browser)|trust this (device|computer|browser)|don.?t ask (me )?again/i.test(words(box))) continue;
       const face = shown(box) ? box : [...(box.labels ?? [])].find(shown2);
       if (face) face.click();
       if (!box.checked) box.click();
     }
-    put(code, data.code); send(code);
   }
+  if (step === 'push' && push) { tickRemember(); push.click(); }
   if (step === 'remember' && remember) remember.click();
   return { done: true };
 }
@@ -153,8 +159,8 @@ export async function signIn(site, tab, say) {
       body: JSON.stringify({ host: `${site.id}.signin`, entry: { kind: 'signin', at: new Date().toISOString(), version: chrome.runtime.getManifest().version, has, outline } }) }).catch(() => {});
   };
   const acted = new Set();
-  let since = Date.now(), quiet = 0, shown = false;
-  for (const end = Date.now() + 4 * 60_000; Date.now() < end;) {
+  let since = Date.now(), quiet = 0, shown = false, patience = 20;   // patience: how many looks (0.7 s apart) a page with nothing to fill in is given
+  for (const end = Date.now() + 9 * 60_000; Date.now() < end;) {
     const now = await chrome.tabs.get(tab.id);
     if (site.loggedIn.test(now.url ?? '')) {
       if (rejected[key]) { delete rejected[key]; await chrome.storage.local.set({ rejected }); }
@@ -164,7 +170,7 @@ export async function signIn(site, tab, say) {
     if (has === 'blocked') return { ok: false, message: 'Chrome has not been told this extension may fill in this site. Press "Allow sign-in help" in the extension\'s popup.' };
     if (has === 'none' || has === 'elsewhere') {   // still loading, on its way somewhere, or a page with nothing to fill in
       if (quiet === 12 && now.status === 'complete') await note(`${has} (nothing to fill in)`);
-      if (++quiet > 20) return { ok: false, message: has === 'elsewhere' ? `Its sign-in page is at ${new URL(now.url).hostname}${new URL(now.url).pathname.slice(0, 60)}, which coincell does not fill in. Log in yourself; it will be read as soon as you are in.` : UNKNOWN };
+      if (++quiet > patience) return { ok: false, message: has === 'elsewhere' ? `Its sign-in page is at ${new URL(now.url).hostname}${new URL(now.url).pathname.slice(0, 60)}, which coincell does not fill in. Log in yourself; it will be read as soon as you are in.` : UNKNOWN };
       await sleep(700); continue;
     }
     quiet = 0;
@@ -185,6 +191,12 @@ export async function signIn(site, tab, say) {
       if (!got.code) return { ok: false, message: got.message };
       await say('Entering the code');
       await run('code', { code: got.code });
+    }
+    if (has === 'push') {   // the site wants a tap in its phone app: ask for it, then give you three minutes
+      const asks = await run('outline').then((r) => r[0]?.result?.headings?.[0]).catch(() => '');
+      await run('push');
+      await say(`${asks ? `The site says: “${asks}”.` : ''} Approve the sign-in on your phone.`.trim(), 'needs-approval');
+      patience = 260;
     }
     if (has === 'remember') await run('remember');
     acted.add(has);

@@ -16,8 +16,9 @@ export default {
       await page.fill('input[name="userId"]', 'demo');
       await page.locator('input[name="passcode"]').pressSequentially('copper-demo');   // key by key: this site wants to see keys pressed
       await page.click('button[type="submit"]');
-      await page.waitForURL(/\/(remember|overview)/);
+      await page.waitForURL(/\/(push|remember|overview)/);
     }
+    if (page.url().includes('/push')) { await page.click('#send-push'); await page.waitForURL(/\/(remember|overview)/, { timeout: 20_000 }); }   // the demo approves itself
     if (page.url().includes('/remember')) await page.click('#not-now');
     await page.waitForSelector('[data-field="current-balance"]');
     const field = (name) => page.locator(`[data-field="${name}"]`).innerText();

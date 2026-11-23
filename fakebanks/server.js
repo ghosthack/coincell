@@ -4,7 +4,7 @@
 //   4702 Kestrel Card      single-page app over a JSON API, "Load more" paging; a login form that only
 //                          notices a password that was edited, as some carelessly built sites do;
 //                          then a code from an authenticator app
-//   4703 Copperleaf Card   server-rendered, "remember this device" step, CSV download; a login form that
+//   4703 Copperleaf Card   server-rendered, an approval sent to its phone app, "remember this device" step, CSV download; a login form that
 //                          refuses a passcode unless its field was clicked into and typed in
 //   4704 Meridian Wealth   two-step login, then a texted code; JSON API behind the session cookie
 //   4705 Lakeshore Home Loans  password + security question, payment history split into principal/interest/escrow
@@ -214,15 +214,24 @@ createSite({ port: 4703, name: 'Copperleaf Card Services', color: '#a8501a', han
   if (path === '/login') {
     if (method !== 'POST') return login();
     if (form.userId !== 'demo' || form.passcode !== 'copper-demo') return login('Sign on failed.');
-    c.start({ stage: 'remember' }); return c.redirect('/remember');
+    c.start({ stage: 'push' }); return c.redirect('/push');
   }
   if (!session) return c.redirect('/login');
+  if (path === '/push') {   // an approval on the site's phone app: only a person with the phone can give it
+    if (session.stage !== 'push') return c.redirect('/remember');
+    if (method === 'POST') { session.sentAt = Date.now(); return c.redirect('/push'); }
+    if (!session.sentAt) return c.html(`<div class="box"><h2>We'll send a notification to the Copperleaf app on your phone</h2>
+      <form method="post" action="/push"><button id="send-push">Send notification</button></form></div>`);
+    if (Date.now() - session.sentAt < 4000) return c.html(`<div class="box"><h2>Check your phone</h2><p id="waiting">Waiting for you to approve the sign-on in the Copperleaf app…</p>
+      <p>Demo: there is no app, so it is approved by itself after a few seconds.</p></div><script>setTimeout(() => location.reload(), 1500);</script>`);
+    session.stage = 'remember'; return c.redirect('/remember');
+  }
   if (path === '/remember') {
     if (method === 'POST') { session.stage = 'ok'; return c.redirect('/overview'); }
     return c.html(`<div class="box"><h2>Remember this device?</h2><p>We won't ask extra security questions next time.</p>
       <form method="post" action="/remember"><button name="choice" value="yes">Remember this device</button> <button name="choice" value="no" id="not-now">Not now</button></form></div>`);
   }
-  if (session.stage !== 'ok') return c.redirect('/remember');
+  if (session.stage !== 'ok') return c.redirect(session.stage === 'push' ? '/push' : '/remember');
   if (path === '/' || path === '/overview') {
     const recent = [...k.tx].reverse().slice(0, 8);
     return c.html(`<div class="box"><h2>${esc(k.name)} ending in ${k.last4}</h2><dl>
