@@ -19,6 +19,7 @@ const sleep = (ms) => new Promise((r) => setTimeout(r, ms));
 function onPage(step, data) {
   const shown = (el) => { const r = el.getBoundingClientRect(), s = getComputedStyle(el); return r.width > 2 && r.height > 2 && s.visibility !== 'hidden' && s.display !== 'none' && !el.disabled && !el.readOnly; };
   const words = (i) => [i.name, i.id, i.placeholder, i.autocomplete, i.getAttribute('aria-label'), i.labels?.[0]?.textContent].join(' ');
+  const shown2 = (el) => { const r = el.getBoundingClientRect(); return r.width > 2 && r.height > 2 && getComputedStyle(el).visibility !== 'hidden'; };
   const inputs = [...document.querySelectorAll('input')].filter(shown);
   const plain = inputs.filter((i) => ['text', 'email', 'tel', 'number'].includes(i.type));
   const pass = inputs.find((i) => i.type === 'password' && i.autocomplete !== 'one-time-code');
@@ -29,6 +30,19 @@ function onPage(step, data) {
   const label = (b) => (b.textContent || b.value || b.getAttribute('aria-label') || '').trim();
   const remember = pass || code || user ? null : buttons(document).find((b) => /remember (this|my) (device|computer|browser)|trust this (device|computer|browser)/i.test(label(b)));
 
+  // The layout of the page, for working out why a sign-in went wrong: headings, and the labels of
+  // fields and buttons. No field values; digits and anything shaped like an email address are masked.
+  if (step === 'outline') {
+    const mask = (t) => String(t ?? '').replace(/\s+/g, ' ').trim().replace(/[^\s@]+@[^\s@]+/g, 'x@x').replace(/\d/g, '9').slice(0, 90);
+    return {
+      path: location.pathname.replace(/\d/g, '9').slice(0, 80), frames: document.querySelectorAll('iframe').length,
+      headings: [...document.querySelectorAll('h1, h2, h3, legend, [role=heading]')].filter(shown2).slice(0, 8).map((h) => mask(h.textContent)),
+      fields: [...document.querySelectorAll('input, select, textarea')].filter((i) => i.type !== 'hidden').slice(0, 20).map((i) => ({ type: i.type, name: mask(i.name), id: mask(i.id), autocomplete: i.autocomplete || undefined,
+        label: mask(i.labels?.[0]?.textContent || i.getAttribute('aria-label') || i.placeholder), shown: shown(i), checked: i.type === 'radio' || i.type === 'checkbox' ? i.checked : undefined })),
+      buttons: buttons(document).slice(0, 15).map((b) => mask(label(b))),
+      links: [...document.querySelectorAll('a')].filter(shown2).slice(0, 15).map((a) => mask(a.textContent)).filter(Boolean),
+    };
+  }
   if (step === 'look') return { has: pass ? 'password' : code ? 'code' : user ? 'user' : remember ? 'remember' : 'none' };
 
   const told = (el, inputType, text) => el.dispatchEvent(new InputEvent('input', { bubbles: true, inputType, data: text ?? null }));
@@ -121,6 +135,14 @@ export async function signIn(site, tab, say) {
   const look = async () => { try { return (await run('look'))[0]?.result?.has ?? 'none'; } catch (e) { return /cannot access|permission/i.test(e.message) ? 'blocked' : 'none'; } };
   // A sign-in page may wait until it is actually on screen, so its tab and window are brought to the front.
   const front = async () => { await chrome.tabs.update(tab.id, { active: true }).catch(() => {}); await chrome.windows.update(tab.windowId, { focused: true }).catch(() => {}); await sleep(500); };
+  // What each page of the sign-in looked like goes to coincell's recordings folder on this computer (layout only).
+  let lastNoted = '';
+  const note = async (has) => {
+    if (has === lastNoted) return; lastNoted = has;
+    const outline = await run('outline').then((r) => r[0]?.result).catch(() => null);
+    if (outline) await fetch(`${TARGETS[site.target]}/api/recordings`, { method: 'POST', headers: { 'content-type': 'application/json', 'x-coincell': '1' },
+      body: JSON.stringify({ host: `${site.id}.signin`, entry: { kind: 'signin', at: new Date().toISOString(), version: chrome.runtime.getManifest().version, has, outline } }) }).catch(() => {});
+  };
   const acted = new Set();
   let since = Date.now(), quiet = 0, shown = false;
   for (const end = Date.now() + 4 * 60_000; Date.now() < end;) {
@@ -132,10 +154,12 @@ export async function signIn(site, tab, say) {
     const has = now.status === 'complete' ? (site.signIn.test(now.url ?? '') ? await look() : 'elsewhere') : 'none';
     if (has === 'blocked') return { ok: false, message: 'Chrome has not been told this extension may fill in this site. Press "Allow sign-in help" in the extension\'s popup.' };
     if (has === 'none' || has === 'elsewhere') {   // still loading, on its way somewhere, or a page with nothing to fill in
+      if (quiet === 12 && now.status === 'complete') await note(`${has} (nothing to fill in)`);
       if (++quiet > 20) return { ok: false, message: has === 'elsewhere' ? `Its sign-in page is at ${new URL(now.url).hostname}${new URL(now.url).pathname.slice(0, 60)}, which coincell does not fill in. Log in yourself; it will be read as soon as you are in.` : UNKNOWN };
       await sleep(700); continue;
     }
     quiet = 0;
+    await note(has);
     if (acted.has(has)) {   // answered this already, and the site is asking again
       if (has === 'password') { await chrome.storage.local.set({ rejected: { ...rejected, [key]: mark } }); return { ok: false, message: 'The site did not let the saved login through. It will not be tried again until you save it anew, or log in yourself.' }; }
       return { ok: false, message: has === 'code' ? 'The site did not accept the emailed code. Enter it yourself.' : UNKNOWN };
