@@ -74,7 +74,13 @@ function onPage(step, data) {
   }
   if (step === 'code' && code) {
     // "Remember this device", where offered, means fewer codes later.
-    for (const box of document.querySelectorAll('input[type=checkbox]')) if (shown(box) && !box.checked && /remember|trust|don.?t ask/i.test(words(box))) box.click();
+    // The real checkbox is often hidden behind a styled label, so it is ticked through its label when that is what shows.
+    for (const box of document.querySelectorAll('input[type=checkbox]')) {
+      if (box.checked || box.disabled || !/remember (this|my) (device|computer|browser)|trust this (device|computer|browser)|don.?t ask (me )?again/i.test(words(box))) continue;
+      const face = shown(box) ? box : [...(box.labels ?? [])].find(shown2);
+      if (face) face.click();
+      if (!box.checked) box.click();
+    }
     put(code, data.code); send(code);
   }
   if (step === 'remember' && remember) remember.click();
@@ -168,7 +174,9 @@ export async function signIn(site, tab, say) {
     if (has === 'user') { await say('Signing in'); await run('user', { username: login.username }); }
     if (has === 'password') { await say('Signing in'); since = Date.now(); await run('password', { username: login.username, password: login.password, nudge: !plainFill }); }
     if (has === 'code') {
-      await say('The site asks for a code. An emailed one is entered by itself; type a texted one here.', 'needs-code');
+      // Say what the site itself asks for, in its own words (its heading), so you know which code it wants.
+      const asks = await run('outline').then((r) => r[0]?.result?.headings?.[0]).catch(() => '');
+      await say(`${asks ? `The site says: “${asks}”.` : 'The site asks for a code.'} Type the code here; one that is emailed is entered by itself.`, 'needs-code');
       const got = await awaitCode(site, login.inbox, since);
       if (!got.code) return { ok: false, message: got.message };
       await say('Entering the code');
