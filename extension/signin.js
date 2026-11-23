@@ -11,7 +11,7 @@
 //     stays open and the site is read as soon as you are in.
 // Fields are set the plain way, then the page is told about it. Nothing here pretends to be a
 // person or hides that a program is filling in the form.
-import { TARGETS } from './sites.js';
+import { SITES, TARGETS } from './sites.js';
 
 const sleep = (ms) => new Promise((r) => setTimeout(r, ms));
 
@@ -216,6 +216,10 @@ const UNKNOWN = 'The site is asking something coincell cannot answer. Finish log
 
 /** Try to get `tab` from the site's sign-in page to its logged-in pages. Returns { ok } or { ok: false, message }. */
 export async function signIn(site, tab, say, { whateverTheAddress = false } = {}) {
+  // An institution can be spread over several sites (sign in on one, land on another): being on the
+  // logged-in pages of any of them counts as being in.
+  const family = SITES.filter((s) => s.id === site.id && s.target === site.target && s.loggedIn);
+  const isIn = (url) => family.some((s) => s.loggedIn.test(url ?? ''));
   if (!site.signIn) return { ok: false };
   const key = `${site.target}:${site.id}`;
   const login = await fetch(`${TARGETS[site.target]}/ext/login?site=${site.id}`, { headers: { 'x-coincell': '1' } }).then((r) => r.json()).catch(() => ({}));
@@ -260,7 +264,7 @@ export async function signIn(site, tab, say, { whateverTheAddress = false } = {}
     // Normally the address says when you are in. For a site whose address says so even on its sign-in
     // form (whateverTheAddress), you are in once something was filled in and the page has had nothing
     // more to fill in for a few looks.
-    const inByAddress = site.loggedIn.test(now.url ?? '');
+    const inByAddress = isIn(now.url);
     // (If the form was in a frame, that frame going away is the sign; a page that merely has nothing to fill in may be waiting for you.)
     if (inByAddress && whateverTheAddress && !(acted.size && (actedFrame ? frameGone : calm >= 4))) { /* keep looking at the page */ } else
     if (inByAddress) {
@@ -338,7 +342,7 @@ export async function signIn(site, tab, say, { whateverTheAddress = false } = {}
     // Give the site time to move on: until it shows something else, for up to 20 seconds.
     for (const until = Date.now() + 20_000; Date.now() < until; await sleep(600)) {
       const t = await chrome.tabs.get(tab.id);
-      if ((site.loggedIn.test(t.url ?? '') && !whateverTheAddress) || (t.status === 'complete' && (await look()) !== has)) break;
+      if ((isIn(t.url) && !whateverTheAddress) || (t.status === 'complete' && (await look()) !== has)) break;
     }
   }
   return { ok: false, message: UNKNOWN };
