@@ -13,8 +13,10 @@
   .row { display: grid; grid-template-columns: minmax(0, 1fr) 92px; align-items: center; gap: 12px; height: 40px; border-top: 1px solid var(--line); }
   .row > .label { white-space: nowrap; overflow: hidden; text-overflow: ellipsis; cursor: help; background: none; border: 0; padding: 0; height: auto; text-align: left; border-radius: 0; }
   .row > :last-child { justify-self: end; }
-  .row button:not(.label) { width: 92px; }
-  .row input[type=checkbox] { margin: 0 2px 0 0; width: 16px; height: 16px; }
+  .row button:not(.label), .boxed { width: 92px; box-sizing: border-box; }
+  /* A checkbox dressed as the buttons around it: its word, then the box on the right. */
+  .boxed { display: flex; align-items: center; justify-content: center; gap: 8px; height: 28px; border-radius: 7px; border: 1px solid color-mix(in srgb, CanvasText 25%, transparent); cursor: pointer; }
+  .boxed input { margin: 0; width: 14px; height: 14px; }
   .detail { color: GrayText; font-size: 12px; padding: 0 0 10px; }
   button { font: inherit; height: 28px; padding: 0 8px; border-radius: 7px; border: 1px solid color-mix(in srgb, CanvasText 25%, transparent); background: Canvas; color: CanvasText; cursor: pointer; white-space: nowrap; }
   button.primary { background: CanvasText; color: Canvas; border-color: CanvasText; }
@@ -35,7 +37,7 @@
   <div id="results" role="status"></div>
   <div class="row"><button class="label" data-for="record-hint">Record this site</button><button id="record">Record</button></div>
   <div class="detail" id="record-hint" hidden>Recording teaches coincell how a new site is built. It keeps the layout of pages and data, never the values.</div>
-  <div class="row"><button class="label" data-for="sync-hint">Read a site when I log in</button><input type="checkbox" id="auto-sync" aria-label="Read a site when I log in"></div>
+  <div class="row"><button class="label" data-for="sync-hint">When I log in to a site</button><label class="boxed">Read<input type="checkbox" id="auto-sync" aria-label="Read a site when I log in to it"></label></div>
   <div class="detail" id="sync-hint" hidden>Logging in to a site coincell knows is the cue to read it, at most once every 15 minutes.</div>
   <div class="row"><button class="label" data-for="allow-hint">Sign-in help</button><button id="allow">Allow</button></div>
   <div class="detail" id="allow-hint" hidden>Lets the extension fill in logins you saved in coincell on those sites' own sign-in pages, and read the codes they email to the Gmail inbox you named. Chrome asks you to confirm.</div>
