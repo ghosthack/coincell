@@ -75,12 +75,17 @@ function onPage(step, data) {
     }
     // The entries of a home-made drop-down can be any kind of element, so they are found by what they
     // say: the innermost visible element whose text starts with "Email" (else "Text").
-    const saying = (re) => [...document.querySelectorAll('body *')].filter((e) => shown2(e) && re.test(e.textContent) && e.textContent.trim().length < 60).filter((e, _, all) => !all.some((o) => o !== e && e.contains(o))).at(-1);
+    // A home-made control may answer to the press rather than the click, so it is given both.
+    const press = (e) => { for (const type of ['pointerdown', 'mousedown']) e.dispatchEvent(new MouseEvent(type, { bubbles: true, cancelable: true, view: window })); e.focus?.(); for (const type of ['pointerup', 'mouseup']) e.dispatchEvent(new MouseEvent(type, { bubbles: true, cancelable: true, view: window })); e.click(); };
+    const visible = data.evenHidden ? () => true : shown2;
+    const saying = (re) => [...document.querySelectorAll('body *')].filter((e) => visible(e) && re.test(e.textContent) && e.textContent.trim().length < 60).filter((e, _, all) => !all.some((o) => o !== e && e.contains(o))).at(-1);
     const item = saying(/^\s*e-?mail\b/i) ?? saying(/^\s*text\b/i);
     const how = (e) => { const chain = []; for (let n = e; n && chain.length < 4; n = n.parentElement) chain.push(`${n.tagName.toLowerCase()}${n.getAttribute('role') ? `[role=${n.getAttribute('role')}]` : ''}`); return chain.join(' < '); };
-    if (item) { const within = how(item); (item.closest('[role=option], [role=menuitem], li, a, button') ?? item).click(); return { picked: /e-?mail/i.test(item.textContent) ? 'email' : 'text', within }; }
-    const opener = [...document.querySelectorAll('[aria-haspopup], [role=combobox], [id*="select" i], [id*="dropdown" i]')].filter(shown2).find((e) => !e.matches('input[type=radio], input[type=checkbox]'));
-    if (opener) { opener.click(); return { opened: how(opener) }; }
+    if (item) { const within = how(item); press(item.closest('[role=option], [role=menuitem], li, a, button') ?? item); return { picked: /e-?mail/i.test(item.textContent) ? 'email' : 'text', within }; }
+    // The control that opens it: something meant to be pressed, before any wrapper that merely has "select" in its name.
+    const openers = [...document.querySelectorAll('[aria-haspopup], [role=combobox], [id*="select" i], [id*="dropdown" i]')].filter(shown2).filter((e) => !e.matches('input[type=radio], input[type=checkbox]'));
+    const opener = openers.find((e) => e.matches('button, input[type=button], [role=combobox], [role=button], [aria-haspopup]')) ?? openers.at(-1);
+    if (opener) { press(opener); return { opened: how(opener) }; }
     return { nothing: true };
   }
   // Going on is a step of its own: pages often enable the button only once a choice has registered.
@@ -265,7 +270,7 @@ export async function signIn(site, tab, say, { whateverTheAddress = false } = {}
       if (picked === 'more') {   // "another way" may open a drop-down of ways: pick from it
         await sleep(900);
         for (let i = 0; i < 6; i++) {
-          const r = (await run('contact').catch(() => []))[0]?.result ?? {};
+          const r = (await run('contact', { evenHidden: i >= 3 }).catch(() => []))[0]?.result ?? {};   // after three tries at opening it, an entry is pressed even if it does not show
           trail.push(r.picked ? `picked ${r.picked} in ${r.within}` : r.opened ? `opened ${r.opened}` : 'nothing found');
           if (r.picked) { picked = r.picked; break; }
           if (r.nothing) break;
