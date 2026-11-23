@@ -255,11 +255,19 @@ export async function signIn(site, tab, say, { whateverTheAddress = false } = {}
     quiet = 0; calm = 0;
     await note(has);
     if (acted.has(has)) {   // answered this already, and the site is asking again
+      lastNoted = ''; await note(`${has} again, after answering it`);
       if (has === 'password') { await chrome.storage.local.set({ rejected: { ...rejected, [key]: mark } }); return { ok: false, message: 'The site did not let the saved login through. It will not be tried again until you save it anew, or log in yourself.' }; }
       return { ok: false, message: has === 'code' ? 'The site did not accept the emailed code. Enter it yourself.' : UNKNOWN };
     }
     if (!shown) { await front(); shown = true; }
     if (has === 'user') { await say('Signing in'); await run('user', { username: login.username }); }
+    if (has === 'password') {
+      // No more than three tries at a password in an hour, whatever the reason for them: sites lock accounts that are tried too often.
+      const { tries = {} } = await chrome.storage.local.get('tries');
+      const recent = (tries[key] ?? []).filter((t) => Date.now() - t < 60 * 60_000);
+      if (recent.length >= 3 && site.target === 'real') return { ok: false, message: 'The saved login has been tried three times in the last hour, so it is being left alone for now. Log in yourself, or try again later.' };
+      await chrome.storage.local.set({ tries: { ...tries, [key]: [...recent, Date.now()] } });
+    }
     if (has === 'password') { await say('Signing in'); since = Date.now(); await run('password', { username: login.username, password: login.password, nudge: !plainFill }); }
     if (has === 'code') {
       // Say what the site itself asks for, in its own words (its heading), so you know which code it wants.
