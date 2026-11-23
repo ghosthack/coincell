@@ -45,7 +45,7 @@ function onPage(step, data) {
   }
   // A page offering to send an approval to the site's phone app.
   const push = pass || code || user ? null : buttons(document).find((b) => /^send (a |the )?(push )?notification/i.test(label(b)));
-  if (step === 'look') return { has: pass ? 'password' : code ? 'code' : user ? 'user' : push ? 'push' : remember ? 'remember' : 'none' };
+  if (step === 'look') return { has: pass ? 'password' : code ? 'code' : user ? 'user' : push ? 'push' : remember ? 'remember' : 'none', url: location.href };
 
   const told = (el, inputType, text) => el.dispatchEvent(new InputEvent('input', { bubbles: true, inputType, data: text ?? null }));
   // In a tab you are not looking at, the browser holds back the "focus" notice, so the page is told directly.
@@ -146,8 +146,19 @@ export async function signIn(site, tab, say, { whateverTheAddress = false } = {}
   const mark = `${login.savedAt} by ${chrome.runtime.getManifest().version}`;
   if (rejected[key] === mark) return { ok: false, message: 'The saved login was not accepted last time, so it was not tried again. Log in yourself, or save the login again.' };
 
-  const run = (step, data = {}) => chrome.scripting.executeScript({ target: { tabId: tab.id }, func: onPage, args: [step, data] });
-  const look = async () => { try { return (await run('look'))[0]?.result?.has ?? 'none'; } catch (e) { return /cannot access|permission/i.test(e.message) ? 'blocked' : 'none'; } };
+  // A sign-in form may sit in a frame inside the page. Every frame is looked at, but only the page
+  // itself or a frame served from this site's own addresses is ever acted on.
+  let frame = 0;
+  const run = (step, data = {}) => chrome.scripting.executeScript({ target: { tabId: tab.id, frameIds: [frame] }, func: onPage, args: [step, data] });
+  const look = async () => {
+    try {
+      const seen = (await chrome.scripting.executeScript({ target: { tabId: tab.id, allFrames: true }, func: onPage, args: ['look', {}] }))
+        .map((r) => ({ frameId: r.frameId, ...r.result })).filter((f) => f.has && f.has !== 'none' && (f.frameId === 0 || site.signIn.test(f.url ?? '') || site.loggedIn.test(f.url ?? '')));
+      const pick = seen.find((f) => f.frameId === 0) ?? seen[0];
+      frame = pick?.frameId ?? 0;
+      return pick?.has ?? 'none';
+    } catch (e) { return /cannot access|permission/i.test(e.message) ? 'blocked' : 'none'; }
+  };
   // A sign-in page may wait until it is actually on screen, so its tab and window are brought to the front.
   const front = async () => { await chrome.tabs.update(tab.id, { active: true }).catch(() => {}); await chrome.windows.update(tab.windowId, { focused: true }).catch(() => {}); await sleep(500); };
   // What each page of the sign-in looked like goes to coincell's recordings folder on this computer (layout only).
