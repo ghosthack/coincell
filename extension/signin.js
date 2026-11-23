@@ -135,7 +135,7 @@ async function awaitCode(site, inbox, since, authenticator) {
 const UNKNOWN = 'The site is asking something coincell cannot answer. Finish logging in yourself; it will be read as soon as you are in.';
 
 /** Try to get `tab` from the site's sign-in page to its logged-in pages. Returns { ok } or { ok: false, message }. */
-export async function signIn(site, tab, say) {
+export async function signIn(site, tab, say, { whateverTheAddress = false } = {}) {
   if (!site.signIn) return { ok: false };
   const key = `${site.target}:${site.id}`;
   const login = await fetch(`${TARGETS[site.target]}/ext/login?site=${site.id}`, { headers: { 'x-coincell': '1' } }).then((r) => r.json()).catch(() => ({}));
@@ -159,21 +159,28 @@ export async function signIn(site, tab, say) {
       body: JSON.stringify({ host: `${site.id}.signin`, entry: { kind: 'signin', at: new Date().toISOString(), version: chrome.runtime.getManifest().version, has, outline } }) }).catch(() => {});
   };
   const acted = new Set();
-  let since = Date.now(), quiet = 0, shown = false, patience = 20;   // patience: how many looks (0.7 s apart) a page with nothing to fill in is given
+  let since = Date.now(), quiet = 0, calm = 0, shown = false, patience = 20;   // patience: how many looks (0.7 s apart) a page with nothing to fill in is given
   for (const end = Date.now() + 9 * 60_000; Date.now() < end;) {
     const now = await chrome.tabs.get(tab.id);
-    if (site.loggedIn.test(now.url ?? '')) {
+    // Normally the address says when you are in. For a site whose address says so even on its sign-in
+    // form (whateverTheAddress), you are in once something was filled in and the page has had nothing
+    // more to fill in for a few looks.
+    const inByAddress = site.loggedIn.test(now.url ?? '');
+    if (inByAddress && whateverTheAddress && !(acted.size && calm >= 4)) { /* keep looking at the page */ } else
+    if (inByAddress) {
       if (rejected[key]) { delete rejected[key]; await chrome.storage.local.set({ rejected }); }
       return { ok: true };
     }
     const has = now.status === 'complete' ? (site.signIn.test(now.url ?? '') ? await look() : 'elsewhere') : 'none';
     if (has === 'blocked') return { ok: false, message: 'Chrome has not been told this extension may fill in this site. Press "Allow sign-in help" in the extension\'s popup.' };
     if (has === 'none' || has === 'elsewhere') {   // still loading, on its way somewhere, or a page with nothing to fill in
+      if (has === 'none' && now.status === 'complete') calm++;
       if (quiet === 12 && now.status === 'complete') await note(`${has} (nothing to fill in)`);
+      if (whateverTheAddress && !acted.size && quiet > 14) return { ok: false };   // nothing here to sign in to: the read failed for another reason
       if (++quiet > patience) return { ok: false, message: has === 'elsewhere' ? `Its sign-in page is at ${new URL(now.url).hostname}${new URL(now.url).pathname.slice(0, 60)}, which coincell does not fill in. Log in yourself; it will be read as soon as you are in.` : UNKNOWN };
       await sleep(700); continue;
     }
-    quiet = 0;
+    quiet = 0; calm = 0;
     await note(has);
     if (acted.has(has)) {   // answered this already, and the site is asking again
       if (has === 'password') { await chrome.storage.local.set({ rejected: { ...rejected, [key]: mark } }); return { ok: false, message: 'The site did not let the saved login through. It will not be tried again until you save it anew, or log in yourself.' }; }
@@ -203,7 +210,7 @@ export async function signIn(site, tab, say) {
     // Give the site time to move on: until it shows something else, for up to 20 seconds.
     for (const until = Date.now() + 20_000; Date.now() < until; await sleep(600)) {
       const t = await chrome.tabs.get(tab.id);
-      if (site.loggedIn.test(t.url ?? '') || (t.status === 'complete' && (await look()) !== has)) break;
+      if ((site.loggedIn.test(t.url ?? '') && !whateverTheAddress) || (t.status === 'complete' && (await look()) !== has)) break;
     }
   }
   return { ok: false, message: UNKNOWN };

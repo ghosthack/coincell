@@ -220,7 +220,14 @@ async function refreshOne(site) {
       tab = await settled(tab.id);
     }
     await say(site, 'working', 'Reading');
-    const r = await sendSite(tab);
+    let r = await sendSite(tab);
+    // Some sites keep their logged-in address while showing a sign-in form. So a read that comes back
+    // empty is followed by one try at signing in on that very page, and then a second read.
+    if (!r.ok && site.signIn && /not logged in|did not (load|send)/i.test(r.message)) {
+      const signed = await signIn(site, tab, (message, state = 'working') => say(site, state, message), { whateverTheAddress: true });
+      if (signed.ok) { tab = await settled(tab.id); await say(site, 'working', 'Reading'); r = await sendSite(tab); }
+      else if (signed.message) return void await awaitLogin(signed.message);
+    }
     if (r.ok) {
       await say(site, 'done', r.message, r.warnings);
       const { cool = {} } = await chrome.storage.session.get('cool');   // read; no need to read it again for a while
