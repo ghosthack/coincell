@@ -34,13 +34,16 @@ function onPage(step, data) {
   // fields and buttons. No field values; digits and anything shaped like an email address are masked.
   if (step === 'outline') {
     const texts = [...document.querySelectorAll('p, label, li, [role=radio], [role=option]')].filter(shown2).map((e) => e.textContent.replace(/\s+/g, ' ').trim()).filter((t) => t.length > 3 && t.length < 160).slice(0, 14);
+    const tagOf = (el) => { const chain = []; for (let n = el; n && chain.length < 4; n = n.parentNode instanceof ShadowRoot ? n.parentNode.host : n.parentElement) chain.push(n.tagName?.toLowerCase() + (n.getAttribute?.('role') ? `[role=${n.getAttribute('role')}]` : '')); return chain.join(' < '); };
     const mask = (t) => String(t ?? '').replace(/\s+/g, ' ').trim().replace(/[^\s@]+@[^\s@]+/g, 'x@x').replace(/\d/g, '9').slice(0, 90);
     return {
       path: location.pathname.replace(/\d/g, '9').slice(0, 80), frames: document.querySelectorAll('iframe').length,
       headings: [...document.querySelectorAll('h1, h2, h3, legend, [role=heading]')].filter(shown2).slice(0, 8).map((h) => mask(h.textContent)),
       fields: [...document.querySelectorAll('input, select, textarea')].filter((i) => i.type !== 'hidden').slice(0, 20).map((i) => ({ type: i.type, name: mask(i.name), id: mask(i.id), autocomplete: i.autocomplete || undefined,
-        label: mask(i.labels?.[0]?.textContent || i.getAttribute('aria-label') || i.placeholder), shown: shown(i), checked: i.type === 'radio' || i.type === 'checkbox' ? i.checked : undefined })),
+        label: mask(i.labels?.[0]?.textContent || i.getAttribute('aria-label') || i.placeholder), shown: shown(i), within: i.type === 'radio' ? tagOf(i) : undefined, checked: i.type === 'radio' || i.type === 'checkbox' ? i.checked : undefined })),
       buttons: buttons(document).slice(0, 15).map((b) => mask(label(b))),
+      nextButton: (() => { const b = [...document.querySelectorAll('button, [role=button]')].find((x) => /^next/i.test(label(x))); return b ? `${tagOf(b)} disabled=${b.disabled} aria-disabled=${b.getAttribute('aria-disabled')} type=${b.type}` : null; })(),
+      alerts: [...document.querySelectorAll('[role=alert], .error, [aria-live=assertive]')].filter(shown2).map((e) => mask(e.textContent)).filter(Boolean).slice(0, 4),
       links: [...document.querySelectorAll('a')].filter(shown2).slice(0, 15).map((a) => mask(a.textContent)).filter(Boolean),
       texts: texts.map(mask),
     };
@@ -239,7 +242,9 @@ export async function signIn(site, tab, say, { whateverTheAddress = false } = {}
     }
     if (has.startsWith('choose')) {
       const picked = (await run('choose'))[0]?.result?.picked;
-      for (let i = 0; i < 6; i++) { await sleep(600); if ((await run('go').catch(() => []))[0]?.result?.went) break; }
+      let went = false;
+      for (let i = 0; i < 6 && !went; i++) { await sleep(600); went = Boolean((await run('go').catch(() => []))[0]?.result?.went); }
+      await sleep(1500); await note(`after choosing ${picked} (next pressed: ${went})`);
       if (picked === 'push') { await say('Approve the sign-in on your phone.', 'needs-approval'); patience = 260; }
       else await say(picked === 'email' ? 'Asked the site to email a code' : picked === 'text' ? 'Asked the site to text a code' : 'Choosing how the site should reach you');
       since = Date.now();
