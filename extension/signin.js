@@ -130,8 +130,11 @@ function onPage(step, data) {
   if (step === 'user' && user) { put(user, data.username); if (data.nudge !== false) nudge(user); send(user); }
   if (step === 'password' && pass) {
     // The username gets the same add-and-remove treatment as the password: some forms only take in a field that saw keys pressed.
-    if (user && user.value !== data.username) { put(user, data.username); if (data.nudge) nudge(user); }
-    put(pass, data.password); if (data.nudge) nudge(pass); send(pass);
+    // `trace` says, step by step, whether each field held something (never what), for working out a form that drops a value.
+    const trace = [`user field ${user ? `#${user.id.replace(/\d/g, '9')}` : 'not found'}`], held = (tag) => trace.push(`${tag}: user ${user ? Boolean(user.value) : '-'}, password ${Boolean(pass.value)}`);
+    if (user && user.value !== data.username) { put(user, data.username); held('user set'); if (data.nudge) { nudge(user); held('user nudged'); } }
+    put(pass, data.password); held('password set'); if (data.nudge) { nudge(pass); held('password nudged'); } send(pass); held('sent');
+    return { done: true, trace };
   }
   if (step === 'code' && code) {
     tickRemember();
@@ -272,7 +275,7 @@ export async function signIn(site, tab, say, { whateverTheAddress = false } = {}
       if (recent.length >= 3 && site.target === 'real') return { ok: false, message: 'The saved login has been tried three times in the last hour, so it is being left alone for now. Log in yourself, or try again later.' };
       await chrome.storage.local.set({ tries: { ...tries, [key]: [...recent, Date.now()] } });
     }
-    if (has === 'password') { await say('Signing in'); since = Date.now(); await run('password', { username: login.username, password: login.password, nudge: !plainFill }); }
+    if (has === 'password') { await say('Signing in'); since = Date.now(); const filled = await run('password', { username: login.username, password: login.password, nudge: !plainFill }); lastNoted = ''; await note(`filled (${(filled[0]?.result?.trace ?? []).join('; ')})`); }
     if (has === 'code') {
       // Say what the site itself asks for, in its own words (its heading), so you know which code it wants.
       const asks = await run('outline').then((r) => r[0]?.result?.headings?.[0]).catch(() => '');
