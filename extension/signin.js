@@ -117,6 +117,20 @@ function onPage(step, data) {
     key(el, 'keydown', 'Backspace'); el.value = value; told(el, 'deleteContentBackward'); key(el, 'keyup', 'Backspace');
     el.dispatchEvent(new Event('change', { bubbles: true }));
   };
+  // A field that wipes a value placed in one go (one that builds its contents from key presses, to
+  // mask them, say) is given the text one key at a time instead. Where the page takes the key for
+  // itself, the letter is not added a second time.
+  const keyed = (el, text) => {
+    enter(el); el.value = '';
+    for (const ch of text) {
+      const init = { bubbles: true, cancelable: true, key: ch, charCode: ch.charCodeAt(0), keyCode: ch.toUpperCase().charCodeAt(0), which: ch.charCodeAt(0) };
+      el.dispatchEvent(new KeyboardEvent('keydown', init));
+      const taken = !el.dispatchEvent(new KeyboardEvent('keypress', init)), before = el.value;
+      if (!taken && el.dispatchEvent(new InputEvent('beforeinput', { bubbles: true, cancelable: true, inputType: 'insertText', data: ch }))) { if (el.value === before) el.value = before + ch; told(el, 'insertText', ch); }
+      el.dispatchEvent(new KeyboardEvent('keyup', init));
+    }
+    el.dispatchEvent(new Event('change', { bubbles: true }));
+  };
   const send = (el) => {
     el.blur();
     // The button that says what it does comes first; failing that, the form's own submit button, but never
@@ -132,7 +146,11 @@ function onPage(step, data) {
     // The username gets the same add-and-remove treatment as the password: some forms only take in a field that saw keys pressed.
     // `trace` says, step by step, whether each field held something (never what), for working out a form that drops a value.
     const trace = [`user field ${user ? `#${user.id.replace(/\d/g, '9')}` : 'not found'}`], held = (tag) => trace.push(`${tag}: user ${user ? Boolean(user.value) : '-'}, password ${Boolean(pass.value)}`);
-    if (user && user.value !== data.username) { put(user, data.username); held('user set'); if (data.nudge) { nudge(user); held('user nudged'); } }
+    if (user && user.value !== data.username) {
+      put(user, data.username); held('user set');
+      if (!user.value && data.nudge) { keyed(user, data.username); held('user keyed'); }
+      else if (data.nudge) { nudge(user); held('user nudged'); }
+    }
     put(pass, data.password); held('password set'); if (data.nudge) { nudge(pass); held('password nudged'); } send(pass); held('sent');
     return { done: true, trace };
   }
