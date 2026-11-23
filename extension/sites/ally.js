@@ -67,7 +67,9 @@ export default {
         for (const h of r.transactionHistory ?? []) for (const t of h.transactions ?? []) {
           const date = day(t.transactionPostingDate), amount = t.transactionAmountPvtEncrypt, id = t.transactionId ?? t.transactionIndex ?? `${date}-${t.transactionSequenceNumber}`;
           if (!/^posted$/i.test(t.transactionStatus ?? '') || !date || typeof amount !== 'number' || amount === 0) continue;   // pending lines change before they post
-          a.txns.set(String(id), { id: String(id), date, description: String(t.transactionDescription ?? t.transactionCodeDescription ?? 'Transaction').replace(/\s+/g, ' ').trim(),
+          // The site's id only tells lines apart within this visit: it is a new token every time you log in,
+          // so it is not passed on. coincell then names each line by its date, amount and description.
+          a.txns.set(String(id), { date, description: String(t.transactionDescription ?? t.transactionCodeDescription ?? 'Transaction').replace(/\s+/g, ' ').trim(),
             amount: /^credit$/i.test(t.entryType ?? '') ? Math.abs(amount) : -Math.abs(amount) });
         }
       }
