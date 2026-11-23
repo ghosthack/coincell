@@ -58,10 +58,11 @@ function onPage(step, data) {
   if (step === 'choose' && choice) {
     tickRemember();
     choice.o.face.click(); if (!choice.o.r.checked) choice.o.r.click();
-    const next = buttons(document).find((b) => /^(next|continue|send|submit|confirm)/i.test(label(b)));
-    if (next) next.click();
+    choice.o.r.dispatchEvent(new Event('change', { bubbles: true }));
     return { picked: choice.kind };
   }
+  // Going on is a step of its own: pages often enable the button only once a choice has registered.
+  if (step === 'go') { const next = buttons(document).find((b) => /^(next|continue|send|submit|confirm)/i.test(label(b))); if (next) next.click(); return { went: Boolean(next) }; }
 
   const told = (el, inputType, text) => el.dispatchEvent(new InputEvent('input', { bubbles: true, inputType, data: text ?? null }));
   // In a tab you are not looking at, the browser holds back the "focus" notice, so the page is told directly.
@@ -238,6 +239,7 @@ export async function signIn(site, tab, say, { whateverTheAddress = false } = {}
     }
     if (has.startsWith('choose')) {
       const picked = (await run('choose'))[0]?.result?.picked;
+      for (let i = 0; i < 6; i++) { await sleep(600); if ((await run('go').catch(() => []))[0]?.result?.went) break; }
       if (picked === 'push') { await say('Approve the sign-in on your phone.', 'needs-approval'); patience = 260; }
       else await say(picked === 'email' ? 'Asked the site to email a code' : picked === 'text' ? 'Asked the site to text a code' : 'Choosing how the site should reach you');
       since = Date.now();
