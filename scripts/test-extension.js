@@ -125,7 +125,7 @@ try {
   // A login the site turns down is tried once, never twice.
   await dash('/api/logins', { site: 'harborline', username: 'demo', password: 'not-the-password' });
   await tabs[4701].goto('http://localhost:4701/logout');
-  for (const expected of [/did not accept the saved login/, /not tried again/]) {
+  for (const expected of [/did not let the saved login through/, /not tried again/]) {
     await dash('/api/refresh', { bank: 'harborline' });
     await until('the first progress', (s) => s.active, 10_000);
     st = await until('the refused login', (s) => !s.active && one(s, 'harborline').progress?.state !== 'done', 90_000);

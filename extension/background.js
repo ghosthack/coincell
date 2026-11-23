@@ -179,6 +179,18 @@ const busy = new Set();
 const say = (site, state, message, warnings) => post(TARGETS[site.target], '/ext/progress', { site: site.id, state, message, warnings }).catch(() => {});
 const settled = async (tabId, ms = 30_000) => { for (const end = Date.now() + ms; Date.now() < end; await sleep(300)) { if ((await chrome.tabs.get(tabId)).status === 'complete') break; } await sleep(2500); return chrome.tabs.get(tabId); };
 
+// Pages often do nothing while their tab is in the background. So the tabs this extension opens go
+// in a window of their own, where each is the tab in view, and your own windows are left as they are.
+async function openWork(url) {
+  const { workWindow } = await chrome.storage.session.get('workWindow');
+  if (workWindow != null) {
+    try { await chrome.windows.get(workWindow); return await chrome.tabs.create({ windowId: workWindow, url, active: true }); } catch { /* that window was closed */ }
+  }
+  const win = await chrome.windows.create({ url, focused: false });
+  await chrome.storage.session.set({ workWindow: win.id });
+  return win.tabs[0];
+}
+
 async function refreshOne(site) {
   const key = `${site.target}:${site.id}`;
   if (busy.has(key)) return;
@@ -194,7 +206,7 @@ async function refreshOne(site) {
       // Tabs you opened yourself are never closed.
       const { mine = {} } = await chrome.storage.session.get('mine');
       if (mine[key] != null) await chrome.tabs.remove(mine[key]).catch(() => {});
-      tab = await settled((await chrome.tabs.create({ url: site.home, active: false })).id);
+      tab = await settled((await openWork(site.home)).id);
       opened = true;
       await chrome.storage.session.set({ mine: { ...mine, [key]: site.loggedIn.test(tab.url ?? '') ? undefined : tab.id } });
     }
@@ -242,6 +254,7 @@ chrome.alarms.create('listen', { periodInMinutes: 0.5 });   // the browser puts 
 chrome.alarms.onAlarm.addListener(listenAll);
 chrome.runtime.onStartup.addListener(listenAll);
 chrome.runtime.onInstalled.addListener(listenAll);
+chrome.runtime.onInstalled.addListener(() => chrome.storage.local.remove('rejected'));   // a new version may fill a form differently: saved logins get a fresh try
 listenAll();
 
 // Sync when you log in: landing on a site's logged-in pages is the cue to read it, unless it was
@@ -251,6 +264,8 @@ chrome.tabs.onUpdated.addListener(async (tabId, info, tab) => {
   const site = SITES.find((s) => s.loggedIn?.test(tab.url ?? ''));
   if (!site) return;
   const key = `${site.target}:${site.id}`;
+  const { rejected = {} } = await chrome.storage.local.get('rejected');   // you are in, so whatever was thought of the saved login is out of date
+  if (rejected[key]) { delete rejected[key]; await chrome.storage.local.set({ rejected }); }
   const [{ autoSync = true }, { cool = {} }] = await Promise.all([chrome.storage.local.get('autoSync'), chrome.storage.session.get('cool')]);
   if (!autoSync || busy.has(key) || Date.now() - (cool[key] ?? 0) < 15 * 60_000) return;
   refreshOne(site);

@@ -110,8 +110,10 @@ export async function signIn(site, tab, say) {
 
   const run = (step, data = {}) => chrome.scripting.executeScript({ target: { tabId: tab.id }, func: onPage, args: [step, data] });
   const look = async () => { try { return (await run('look'))[0]?.result?.has ?? 'none'; } catch (e) { return /cannot access|permission/i.test(e.message) ? 'blocked' : 'none'; } };
+  // A sign-in page may wait until it is actually on screen, so its tab and window are brought to the front.
+  const front = async () => { await chrome.tabs.update(tab.id, { active: true }).catch(() => {}); await chrome.windows.update(tab.windowId, { focused: true }).catch(() => {}); await sleep(500); };
   const acted = new Set();
-  let since = Date.now(), quiet = 0;
+  let since = Date.now(), quiet = 0, shown = false;
   for (const end = Date.now() + 4 * 60_000; Date.now() < end;) {
     const now = await chrome.tabs.get(tab.id);
     if (site.loggedIn.test(now.url ?? '')) {
@@ -126,9 +128,10 @@ export async function signIn(site, tab, say) {
     }
     quiet = 0;
     if (acted.has(has)) {   // answered this already, and the site is asking again
-      if (has === 'password') { await chrome.storage.local.set({ rejected: { ...rejected, [key]: login.savedAt } }); return { ok: false, message: 'The site did not accept the saved login. It will not be tried again until you save it anew. Log in yourself.' }; }
+      if (has === 'password') { await chrome.storage.local.set({ rejected: { ...rejected, [key]: login.savedAt } }); return { ok: false, message: 'The site did not let the saved login through. It will not be tried again until you save it anew, or log in yourself.' }; }
       return { ok: false, message: has === 'code' ? 'The site did not accept the emailed code. Enter it yourself.' : UNKNOWN };
     }
+    if (!shown) { await front(); shown = true; }
     if (has === 'user') { await say('Signing in'); await run('user', { username: login.username }); }
     if (has === 'password') { await say('Signing in'); since = Date.now(); await run('password', { username: login.username, password: login.password, nudge: !plainFill }); }
     if (has === 'code') {
