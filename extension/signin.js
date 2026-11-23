@@ -124,9 +124,10 @@ function onPage(step, data) {
     const button = inForm[0] ?? named;
     if (button) button.click(); else el.form?.requestSubmit();
   };
-  if (step === 'user' && user) { put(user, data.username); send(user); }
+  if (step === 'user' && user) { put(user, data.username); if (data.nudge !== false) nudge(user); send(user); }
   if (step === 'password' && pass) {
-    if (user && user.value !== data.username) put(user, data.username);
+    // The username gets the same add-and-remove treatment as the password: some forms only take in a field that saw keys pressed.
+    if (user && user.value !== data.username) { put(user, data.username); if (data.nudge) nudge(user); }
     put(pass, data.password); if (data.nudge) nudge(pass); send(pass);
   }
   if (step === 'code' && code) {
