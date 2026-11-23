@@ -79,12 +79,23 @@ function onPage(step, data) {
     const press = (e) => { for (const type of ['pointerdown', 'mousedown']) e.dispatchEvent(new MouseEvent(type, { bubbles: true, cancelable: true, view: window })); e.focus?.(); for (const type of ['pointerup', 'mouseup']) e.dispatchEvent(new MouseEvent(type, { bubbles: true, cancelable: true, view: window })); e.click(); };
     const visible = data.evenHidden ? () => true : shown2;
     const saying = (re) => [...document.querySelectorAll('body *')].filter((e) => visible(e) && re.test(e.textContent) && e.textContent.trim().length < 60).filter((e, _, all) => !all.some((o) => o !== e && e.contains(o))).at(-1);
-    const item = saying(/^\s*e-?mail\b/i) ?? saying(/^\s*text\b/i);
     const how = (e) => { const chain = []; for (let n = e; n && chain.length < 4; n = n.parentElement) chain.push(`${n.tagName.toLowerCase()}${n.getAttribute('role') ? `[role=${n.getAttribute('role')}]` : ''}`); return chain.join(' < '); };
-    if (item) { const within = how(item); press(item.closest('[role=option], [role=menuitem], li, a, button') ?? item); return { picked: /e-?mail/i.test(item.textContent) ? 'email' : 'text', within }; }
     // The control that opens it: something meant to be pressed, before any wrapper that merely has "select" in its name.
     const openers = [...document.querySelectorAll('[aria-haspopup], [role=combobox], [id*="select" i], [id*="dropdown" i]')].filter(shown2).filter((e) => !e.matches('input[type=radio], input[type=checkbox]'));
     const opener = openers.find((e) => e.matches('button, input[type=button], [role=combobox], [role=button], [aria-haspopup]')) ?? openers.at(-1);
+    // Has a pick registered? Then the control itself now says so.
+    const says = `${opener?.value ?? ''} ${opener?.textContent ?? ''} ${opener?.getAttribute?.('aria-label') ?? ''}`;
+    if (/e-?mail|text me/i.test(says)) return { picked: /e-?mail/i.test(says) ? 'email' : 'text', within: 'confirmed by the control' };
+    const item = saying(/^\s*e-?mail\b/i) ?? saying(/^\s*text\b/i);
+    if (item && data.keys && opener) {   // the keyboard way: arrow down to the entry, then Enter
+      const entries = [...document.querySelectorAll('[role=option]')], at = entries.findIndex((e) => e.contains(item) || item.contains(e));
+      const key = (k) => { for (const type of ['keydown', 'keyup']) (document.activeElement ?? opener).dispatchEvent(new KeyboardEvent(type, { bubbles: true, cancelable: true, key: k, code: k, keyCode: k === 'Enter' ? 13 : 40, which: k === 'Enter' ? 13 : 40 })); };
+      opener.focus();
+      for (let i = 0; i <= Math.max(at, 0); i++) key('ArrowDown');
+      key('Enter');
+      return { pressed: `keys to entry ${at + 1} of ${entries.length}` };
+    }
+    if (item) { const target = item.closest('[role=option], [role=menuitem], li, a, button') ?? item; press(target); if (target !== item) press(item); return { pressed: how(item) }; }
     if (opener) { press(opener); return { opened: how(opener) }; }
     return { nothing: true };
   }
@@ -269,11 +280,12 @@ export async function signIn(site, tab, say, { whateverTheAddress = false } = {}
       let picked = (await run('choose'))[0]?.result?.picked;
       if (picked === 'more') {   // "another way" may open a drop-down of ways: pick from it
         await sleep(900);
-        for (let i = 0; i < 6; i++) {
-          const r = (await run('contact', { evenHidden: i >= 3 }).catch(() => []))[0]?.result ?? {};   // after three tries at opening it, an entry is pressed even if it does not show
-          trail.push(r.picked ? `picked ${r.picked} in ${r.within}` : r.opened ? `opened ${r.opened}` : 'nothing found');
+        for (let i = 0, presses = 0; i < 9; i++) {
+          const r = (await run('contact', { evenHidden: i >= 4, keys: presses >= 2 }).catch(() => []))[0]?.result ?? {};
+          trail.push(r.picked ? `picked ${r.picked}: ${r.within}` : r.pressed ? `pressed ${r.pressed}` : r.opened ? `opened ${r.opened}` : 'nothing found');
           if (r.picked) { picked = r.picked; break; }
           if (r.nothing) break;
+          if (r.pressed) presses++;
           await sleep(700);
         }
       }
