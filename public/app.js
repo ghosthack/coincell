@@ -170,13 +170,15 @@ async function load() {
   const plural = (n) => `${n} account${n === 1 ? '' : 's'}`;
   const b = overview.breakdown;
   $('tiles').replaceChildren(...[
-    ['Cash', b.cash, plural(count('cash'))],
-    ['Investments', b.investments, plural(count('investment'))],
-    ['Retirement', b.retirement, plural(count('retirement'))],
-    ['Property', b.property, count('property') ? 'your own estimate' : 'none entered'],
+    ['Cash', b.cash, plural(count('cash')), 1],
+    ['Investments', b.investments, plural(count('investment')), 2],
+    ['Retirement', b.retirement, plural(count('retirement')), 3],
+    ['Property', b.property, count('property') ? 'your own estimate' : 'none entered', 4],
     ['Owed on cards', -b.cards, plural(count('credit'))],
     ['Owed on mortgage and loans', -b.loans, plural(count('loan'))],
-  ].map(([label, value, sub]) => el('div', { class: 'card tile' }, el('div', { class: 'label' }, label), el('div', { class: 'value' }, money(value)), el('div', { class: 'sub' }, sub))));
+  ].map(([label, value, sub, colour]) => el('div', { class: 'card tile' }, el('div', { class: 'label' }, colour ? el('i', { style: `background:var(--series-${colour})` }) : null, label), el('div', { class: 'value' }, money(value)), el('div', { class: 'sub' }, sub))));
+
+  drawAllocation(b);
 
   const grouped = [];
   for (const a of accounts) {
@@ -234,6 +236,33 @@ async function load() {
   await loadTransactions();
   if (window.loadInsights) await window.loadInsights();
   return overview.sync;
+}
+
+// ---------- what you own, by kind ----------
+// A ring with one slice per kind of asset, in the colours the tiles beside it and the by-type chart
+// use. Debts are not slices (a share of a whole cannot be negative); they have their own tiles.
+function drawAllocation(b) {
+  const parts = [['Cash', b.cash, 1], ['Investments', b.investments, 2], ['Retirement', b.retirement, 3], ['Property', b.property, 4]].filter((p) => p[1] > 0);
+  const total = parts.reduce((t, p) => t + p[1], 0), box = $('alloc');
+  if (!total) return void box.replaceChildren(el('div', { class: 'muted' }, 'Nothing owned yet'));
+  const share = (v) => `${((v / total) * 100).toFixed(1)}%`;
+  const svg = s('svg', { viewBox: '0 0 200 200', role: 'img', 'aria-label': `What you own, by kind: ${parts.map(([n, v]) => `${n} ${share(v)}`).join(', ')}` });
+  const at = (r, a) => `${(100 + r * Math.cos(a)).toFixed(2)} ${(100 + r * Math.sin(a)).toFixed(2)}`;
+  const R = 96, r = 60;
+  let a0 = -Math.PI / 2;
+  for (const [name, value, colour] of parts) {
+    const a1 = a0 + Math.min(value / total, 0.9999) * 2 * Math.PI, big = a1 - a0 > Math.PI ? 1 : 0;
+    const slice = s('path', { d: `M${at(R, a0)} A${R} ${R} 0 ${big} 1 ${at(R, a1)} L${at(r, a1)} A${r} ${r} 0 ${big} 0 ${at(r, a0)} Z`,
+      fill: `var(--series-${colour})`, stroke: 'var(--surface-1)', 'stroke-width': 2, 'stroke-linejoin': 'round' });
+    slice.addEventListener('pointermove', (ev) => showTip(ev, name, [{ color: `var(--series-${colour})`, name: `${share(value)} of what you own`, value: money(value) }]));
+    slice.addEventListener('pointerleave', hideTip);
+    svg.append(slice);
+    a0 = a1;
+  }
+  const text = (y, size, weight, fill, str) => { const t = s('text', { x: 100, y, 'text-anchor': 'middle', 'font-size': size, 'font-weight': weight, fill }); t.textContent = str; return t; };
+  svg.append(text(92, 11, 400, 'var(--text-muted)', 'You own'),
+    text(114, 19, 620, 'var(--text-primary)', new Intl.NumberFormat(undefined, { style: 'currency', currency, notation: 'compact', maximumFractionDigits: 2 }).format(total)));
+  box.replaceChildren(svg);
 }
 
 // ---------- refreshing ----------
