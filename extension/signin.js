@@ -107,12 +107,15 @@ async function readInbox(inbox) {
 
 // A code can come two ways: by email, which is read from the inbox, or typed by you on the coincell
 // dashboard (for one texted to your phone). Both are watched until one turns up.
-async function awaitCode(site, inbox, since) {
+async function awaitCode(site, inbox, since, authenticator) {
   const base = TARGETS[site.target];
   let inboxOk = true;
   for (const end = Date.now() + 5 * 60_000, start = Date.now(); Date.now() < end; await sleep(3000)) {
     const typed = await fetch(`${base}/ext/code?site=${site.id}`, { headers: { 'x-coincell': '1' } }).then((r) => r.json()).catch(() => ({}));
     if (typed.code) return { code: typed.code };
+    // A code coincell makes from a saved setup key: at once when the page asks for an authenticator,
+    // otherwise only after half a minute with no emailed or typed code.
+    if (typed.made && (authenticator || Date.now() - start > 30_000)) return { code: typed.made };
     if (!site.code || !inbox) continue;
     const mail = await readInbox(inbox);
     inboxOk = Boolean(mail);
@@ -176,8 +179,9 @@ export async function signIn(site, tab, say) {
     if (has === 'code') {
       // Say what the site itself asks for, in its own words (its heading), so you know which code it wants.
       const asks = await run('outline').then((r) => r[0]?.result?.headings?.[0]).catch(() => '');
-      await say(`${asks ? `The site says: “${asks}”.` : 'The site asks for a code.'} Type the code here; one that is emailed is entered by itself.`, 'needs-code');
-      const got = await awaitCode(site, login.inbox, since);
+      if (!(login.makesCodes && /authenticator|verification app/i.test(asks ?? ''))) await say(`${asks ? `The site says: “${asks}”.` : 'The site asks for a code.'} Type the code here; one that is emailed is entered by itself.`, 'needs-code');
+      const authenticator = /authenticator|verification app|totp/i.test(`${asks} ${await run('outline').then((r) => (r[0]?.result?.fields ?? []).filter((f) => f.shown).map((f) => `${f.id} ${f.name} ${f.label}`).join(' ')).catch(() => '')}`);
+      const got = await awaitCode(site, login.inbox, since, authenticator);
       if (!got.code) return { ok: false, message: got.message };
       await say('Entering the code');
       await run('code', { code: got.code });

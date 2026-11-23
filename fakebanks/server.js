@@ -2,7 +2,8 @@
 // the scrapers have to cope with different login flows and data formats.
 //   4701 Harborline Bank   server-rendered pages, password + emailed code, paged tables
 //   4702 Kestrel Card      single-page app over a JSON API, "Load more" paging; a login form that only
-//                          notices a password that was edited, as some carelessly built sites do
+//                          notices a password that was edited, as some carelessly built sites do;
+//                          then a code from an authenticator app
 //   4703 Copperleaf Card   server-rendered, "remember this device" step, CSV download; a login form that
 //                          refuses a passcode unless its field was clicked into and typed in
 //   4704 Meridian Wealth   two-step login, then a texted code; JSON API behind the session cookie
@@ -11,6 +12,10 @@
 import http from 'node:http';
 import { randomUUID } from 'node:crypto';
 import { buildWorld } from './world.js';
+import { totp } from '../src/totp.js';
+
+// The made-up authenticator setup key for Kestrel Card. Public, like the demo passwords.
+export const KESTREL_KEY = 'JBSWY3DPEHPK3PXP';
 
 const TTL = 15 * 60_000;
 
@@ -125,10 +130,16 @@ createSite({ port: 4702, name: 'Kestrel Card', color: '#7a2e8e', handler: (c) =>
   if (path === '/api/session' && method === 'POST') {
     const b = c.body();
     if (b.username !== 'demo' || b.password !== 'kestrel-demo') return c.json({ error: 'INVALID_CREDENTIALS' }, 401);
-    c.start({}); return c.json({ ok: true });
+    c.start({ stage: 'code' }); return c.json({ ok: true, needsCode: true });
+  }
+  if (path === '/api/session/code' && method === 'POST') {   // the authenticator code: this half-minute's, or the one before
+    if (!session) return c.json({ error: 'UNAUTHENTICATED' }, 401);
+    const given = String(c.body().code ?? '');
+    if (![0, -30_000].some((back) => totp(KESTREL_KEY, Date.now() + back).code === given)) return c.json({ error: 'INVALID_CODE' }, 401);
+    session.stage = 'ok'; return c.json({ ok: true });
   }
   if (path.startsWith('/api/')) {
-    if (!session) return c.json({ error: 'UNAUTHENTICATED' }, 401);
+    if (session?.stage !== 'ok') return c.json({ error: 'UNAUTHENTICATED' }, 401);
     const toCents = (n) => Math.round(n * 100);
     if (path === '/api/v2/card/summary') {
       return c.json({ card: { productName: k.name, last4: k.last4 }, currentBalanceCents: toCents(-k.bal), creditLimitCents: toCents(k.limit),
@@ -155,7 +166,16 @@ createSite({ port: 4702, name: 'Kestrel Card', color: '#7a2e8e', handler: (c) =>
         document.getElementById('pass').addEventListener('input', (e) => { if (++edits > 1) typed.password = e.target.value; });
         document.getElementById('login-form').addEventListener('submit', async (e) => { e.preventDefault();
         const r = await fetch('/api/session', { method: 'POST', headers: { 'content-type': 'application/json' }, body: JSON.stringify(typed) });
-        if (r.ok) location.href = '/'; else { const el = document.getElementById('error'); el.hidden = false; el.textContent = 'We could not log you in.'; } });</script>`);
+        if (r.ok) location.href = '/login/code'; else { const el = document.getElementById('error'); el.hidden = false; el.textContent = 'We could not log you in.'; } });</script>`);
+  }
+  if (path === '/login/code') {
+    if (!session) return c.redirect('/login');
+    return c.html(`<div class="box"><h2>Enter the code from your authenticator app</h2><p class="err" id="error" hidden></p><form id="code-form">
+      <label>Security code<input id="totp-code" inputmode="numeric" autocomplete="off"></label><button>Continue</button></form>
+      <p>Demo setup key: <code id="demo-key">${KESTREL_KEY}</code></p></div>
+      <script>document.getElementById('code-form').addEventListener('submit', async (e) => { e.preventDefault();
+        const r = await fetch('/api/session/code', { method: 'POST', headers: { 'content-type': 'application/json' }, body: JSON.stringify({ code: document.getElementById('totp-code').value }) });
+        if (r.ok) location.href = '/'; else { const el = document.getElementById('error'); el.hidden = false; el.textContent = 'That code is not right.'; } });</script>`);
   }
   if (path === '/') {
     return c.html(`<div id="root"><p>Loading…</p></div><script>

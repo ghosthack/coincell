@@ -296,7 +296,8 @@
     <h2 id="login-title">Saved login</h2>
     <p class="muted" id="login-note"></p>
     <div id="login-fields"><label for="login-user">Username</label><input id="login-user" autocomplete="off" spellcheck="false" autocapitalize="off">
-    <label for="login-pass">Password</label><input id="login-pass" type="password" autocomplete="new-password"></div>
+    <label for="login-pass">Password</label><input id="login-pass" type="password" autocomplete="new-password">
+<label for="login-totp" title="If this site asks for a code from an authenticator app, coincell can make the codes itself from the setup key. It is kept in the same place as the password and never shown again.">Authenticator setup key (optional)</label><input id="login-totp" type="password" autocomplete="off" spellcheck="false"></div>
 <label for="login-inbox" id="login-inbox-label">Gmail inbox its codes arrive in (optional)</label><input id="login-inbox" type="email" autocomplete="off" spellcheck="false">
     <p class="bad" id="login-error" role="alert" hidden></p>
     <div class="dialog-actions"><button type="button" id="login-remove">Remove saved login</button><span></span><button type="button" id="login-cancel">Cancel</button><button class="primary" id="login-save">Save</button></div>

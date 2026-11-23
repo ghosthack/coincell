@@ -11,6 +11,7 @@ import os from 'node:os';
 import path from 'node:path';
 import { fileURLToPath } from 'node:url';
 import { chromium } from 'playwright';
+import { totp } from '../src/totp.js';
 
 const root = path.resolve(path.dirname(fileURLToPath(import.meta.url)), '..');
 const tmp = fs.mkdtempSync(path.join(os.tmpdir(), 'coincell-ext-'));
@@ -41,7 +42,7 @@ try {
   // Log in to each site the way a person would.
   const logins = {
     4701: async (t) => { await t.fill('#username', 'demo'); await t.fill('#password', 'harbor-demo'); await t.click('#sign-in'); await t.fill('#code', (await (await fetch('http://localhost:4706/mail/u/0/feed/atom')).text()).match(/security code is (\d{6})/)[1]); await t.click('#verify'); await t.waitForSelector('.acct'); },
-    4702: async (t) => { await t.fill('#user-id', 'demo'); await t.locator('#pass').pressSequentially('kestrel-demo'); await t.click('#login-form button'); await t.waitForSelector('#card-summary'); },
+    4702: async (t) => { await t.fill('#user-id', 'demo'); await t.locator('#pass').pressSequentially('kestrel-demo'); await t.click('#login-form button'); await t.fill('#totp-code', totp(await t.locator('#demo-key').innerText()).code); await t.click('#code-form button'); await t.waitForSelector('#card-summary'); },
     4703: async (t) => { await t.fill('input[name="userId"]', 'demo'); await t.locator('input[name="passcode"]').pressSequentially('copper-demo'); await t.click('button[type="submit"]'); await t.click('#not-now'); await t.waitForSelector('[data-field="current-balance"]'); },
     4704: async (t) => { await t.fill('#username', 'demo'); await t.click('#next'); await t.fill('#password', 'meridian-demo'); await t.click('#log-in'); await t.fill('#code', await t.locator('#demo-code').innerText()); await t.click('#verify'); await t.waitForSelector('#portfolio'); },
     4705: async (t) => { await t.fill('#user', 'demo'); await t.fill('#pw', 'lakeshore-demo'); await t.click('#signin'); await t.fill('#answer', await t.locator('#demo-answer').innerText()); await t.click('#continue'); await t.waitForSelector('#loan-summary'); },
@@ -93,14 +94,15 @@ try {
   console.log('after login ->', states(st));
 
   // Saved logins: with every site logged out, a refresh signs in by itself where it can.
-  //   Harborline emails a code, Kestrel's form only notices an edited password, Copperleaf asks to
+  //   Harborline emails a code, Kestrel's form only notices an edited password and then wants an
+  //   authenticator code (made by coincell from the setup key), Copperleaf asks to
   //   remember the device, Meridian asks for the username and password on separate pages and then
   //   texts a code (typed on the dashboard, as you would from your phone), and Lakeshore asks a
   //   security question, which nothing here can answer.
   const passwords = { harborline: 'harbor-demo', kestrel: 'kestrel-demo', copperleaf: 'copper-demo', meridian: 'meridian-demo', lakeshore: 'lakeshore-demo' };
   const one = (s, id) => s.institutions.find((i) => i.id === id);
   const settledAll = (s) => !s.active && s.institutions.filter((i) => i.readBy === 'extension').every((i) => ['done', 'needs-login', 'failed'].includes(i.progress?.state));
-  for (const [site, password] of Object.entries(passwords)) await dash('/api/logins', { site, username: 'demo', password });
+  for (const [site, password] of Object.entries(passwords)) await dash('/api/logins', { site, username: 'demo', password, ...(site === 'kestrel' ? { totp: 'jbsw y3dp ehpk 3pxp' } : {}) });   // Kestrel wants an authenticator code: coincell is given the setup key and makes the codes
   // First the proof that the two careless sites are careless: with the password only set, and the
   // add-and-remove step left out, Kestrel (wants an edit) and Copperleaf (wants focus and a key press) refuse it.
   await worker.evaluate(() => chrome.storage.local.set({ plainFill: true }));
@@ -141,7 +143,8 @@ try {
   }
   // The password leaves coincell only for the extension: not in the status, and not without the header pages cannot send.
   const statusText = JSON.stringify(await dash('/api/status'));
-  if (Object.values(passwords).some((pw) => statusText.includes(pw)) || statusText.includes('not-the-password')) fail('the status must never contain a password');
+  if (Object.values(passwords).some((pw) => statusText.includes(pw)) || statusText.includes('not-the-password') || /JBSWY3DP/i.test(statusText)) fail('the status must never contain a password or a setup key');
+  if (/JBSWY3DP/i.test(await (await fetch('http://localhost:4690/ext/login?site=kestrel', { headers: { 'x-coincell': '1' } })).text())) fail('the setup key must never leave coincell, not even to the extension');
   if ((await fetch('http://localhost:4690/ext/login?site=kestrel')).status !== 403) fail('a saved login must not be readable by a web page');
   else console.log('saved login -> not in the status, and refused to anything that is not the extension');
   await dash('/api/logins', { site: 'harborline', remove: true });

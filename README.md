@@ -79,12 +79,15 @@ Sessions at banks run out within the hour, so a refresh usually finds a login pa
 4. Press **Allow sign-in help** in the extension's popup. Chrome asks you to confirm.
 
 From then on a refresh fills the saved login in on the site's own sign-in page, enters an emailed code, and
-accepts "remember this device" where offered. The limits are deliberate:
+accepts "remember this device" where offered. For a site that wants a code from an authenticator app, add its
+setup key to the saved login and coincell makes the codes itself; a code that is texted to you can be typed on the
+dashboard, in that institution's row. `public/signin-explained.html` (linked from Settings) explains the choices. The limits are deliberate:
 
 - A login is filled in only on addresses listed as that site's sign-in pages in `extension/sites.js`.
 - A login the site turns down is tried once and not again until you save it anew, so nothing can lock your account.
 - Only Gmail's feed of unread mail is read, only mail from the site's own sender is looked at, and none of it is kept.
-- A text message, an app prompt, a security question or a puzzle is left to you: the tab stays open and the site
+- An authenticator setup key never leaves coincell: the extension is handed codes, not the key.
+- An app prompt, a security question or a puzzle is left to you: the tab stays open and the site
   is read as soon as you are in.
 - Fields are set the plain way and the page is told about it. Nothing pretends to be a person, and nothing hides
   that a program is filling in the form. A site that objects will say so, and then that login stays yours to do.

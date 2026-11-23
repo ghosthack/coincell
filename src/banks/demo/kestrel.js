@@ -2,6 +2,7 @@
 // Technique: listen to the JSON the app itself loads, pressing "Load more" until done.
 import { captureJson } from '../../browser.js';
 import { balanceHistory } from '../../history.js';
+import { totp } from '../../totp.js';
 
 const URL = 'http://localhost:4702';
 
@@ -16,6 +17,8 @@ export default {
         await page.fill('#user-id', 'demo');
         await page.locator('#pass').pressSequentially('kestrel-demo');   // key by key: this site ignores a password set in one go
         await page.click('#login-form button');
+        await page.fill('#totp-code', totp(await page.locator('#demo-key').innerText()).code);   // what an authenticator app would show
+        await page.click('#code-form button');
         await page.waitForSelector('#card-summary');
       }
       // Wait for each page of activity to land, then ask for the next until the button goes away.

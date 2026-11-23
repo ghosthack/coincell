@@ -9,6 +9,7 @@
 import { spawnSync } from 'node:child_process';
 import fs from 'node:fs';
 import { DEMO, dataPath } from './paths.js';
+import { parseSetupKey, totp } from './totp.js';
 
 const SERVICE = 'coincell';
 const SECURITY = '/usr/bin/security';
@@ -40,11 +41,24 @@ const LOCKED = 'The Keychain is not available to coincell. Start coincell from y
 const store = DEMO || process.platform !== 'darwin' ? file : keychain;
 export const storeName = store === keychain ? 'the macOS Keychain' : DEMO ? 'the demo data folder' : 'a file readable only by you (.data/logins.json)';
 
-export function saveLogin(site, username, password) {
+/** Save a login. `setupKey` is the site's authenticator setup key, if coincell is to make its codes;
+ *  leave it undefined to keep the one already saved. With no username and password, only the key changes. */
+export function saveLogin(site, username, password, setupKey) {
   if (!okId(site)) throw new Error('Unknown institution');
+  const had = store.get(site);
+  if (!username && !password && had && setupKey) return store.set(site, { ...had, totp: parseSetupKey(setupKey), savedAt: new Date().toISOString() });
   if (!username || !password) throw new Error('Both a username and a password are needed');
-  store.set(site, { username: String(username), password: String(password), savedAt: new Date().toISOString() });
+  const key = setupKey ? parseSetupKey(setupKey) : had?.totp;
+  store.set(site, { username: String(username), password: String(password), ...(key ? { totp: key } : {}), savedAt: new Date().toISOString() });
 }
+/** The current authenticator code for a site whose setup key is saved, or null. A code about to run out is held back. */
+export function authenticatorCode(site) {
+  const key = okId(site) ? store.get(site)?.totp : null;
+  if (!key) return null;
+  const { code, validFor } = totp(key);
+  return validFor >= 6 ? code : null;
+}
+export const makesCodes = (site) => { try { return Boolean(getLogin(site)?.totp); } catch { return false; } };
 export function removeLogin(site) { if (okId(site)) store.set(site, null); }
 export function getLogin(site) { return okId(site) ? store.get(site) : null; }
 /** When a login was saved, or null. Never the login itself. */

@@ -301,7 +301,7 @@ function showStanding(st) {
   table($('logins'), [
     // Two columns, so it fits a phone: the name with its details underneath, and the button.
     { label: 'Institution', get: (r) => [r.name, el('div', { class: 'muted' }, r.isDefault ? `Codes are read from ${st.codesInbox || 'the first Gmail signed in to in Chrome'}`
-      : `${r.loginSavedAt ? `Login saved ${ago(r.loginSavedAt)}` : 'No login saved'} · codes arrive in ${r.inbox || 'the default inbox'}`)] },
+      : `${r.loginSavedAt ? `Login saved ${ago(r.loginSavedAt)}` : 'No login saved'} · ${r.makesCodes ? 'makes its own authenticator codes · ' : ''}emailed codes arrive in ${r.inbox || 'the default inbox'}`)] },
     { label: '', num: true, get: (r) => el('button', { class: 'small', 'data-login': r.id }, r.isDefault || r.loginSavedAt ? 'Change' : 'Save a login…') },
   ], st.institutions.some((i) => i.canSignIn) ? [{ id: DEFAULT, name: 'Default inbox', isDefault: true }, ...st.institutions.filter((i) => i.canSignIn)] : [], st.extension ? 'The extension cannot sign in to any of your institutions yet.' : 'Open Chrome with the coincell extension loaded to set this up.');
   $('store-note').textContent = `Logins are kept in ${st.loginStore}.`;
@@ -354,19 +354,19 @@ function askLogin(id) {
   const inst = latest.institutions.find((i) => i.id === id);
   $('login-title').textContent = `Login for ${inst.name}`;
   $('login-note').textContent = `Kept in ${latest.loginStore}${inst.loginSavedAt ? `. One was saved ${ago(inst.loginSavedAt)}; saving replaces it.` : '.'}`;
-  $('login-user').value = ''; $('login-pass').value = ''; $('login-inbox').value = inst.inbox ?? ''; $('login-error').hidden = true;
+  $('login-user').value = ''; $('login-pass').value = ''; $('login-totp').value = ''; $('login-totp').placeholder = inst.makesCodes ? 'unchanged' : ''; $('login-inbox').value = inst.inbox ?? ''; $('login-error').hidden = true;
   $('login-inbox').placeholder = latest.codesInbox || 'the default inbox';
   for (const id of ['login-user', 'login-pass']) $(id).placeholder = inst.loginSavedAt ? 'unchanged' : '';
   $('login-remove').hidden = !inst.loginSavedAt;
   $('login-dialog').showModal();
 }
 async function sendLogin(body) {
-  try { if (loginFor === DEFAULT) await post('/api/settings', { codesInbox: body.inbox }); else await post('/api/logins', { site: loginFor, ...body }); $('login-pass').value = ''; $('login-dialog').close(); showStanding(await api('/api/status')); }
+  try { if (loginFor === DEFAULT) await post('/api/settings', { codesInbox: body.inbox }); else await post('/api/logins', { site: loginFor, ...body }); $('login-pass').value = ''; $('login-totp').value = ''; $('login-dialog').close(); showStanding(await api('/api/status')); }
   catch (e) { $('login-error').textContent = e.message; $('login-error').hidden = false; }
 }
-$('login-form').addEventListener('submit', (e) => { e.preventDefault(); sendLogin({ username: $('login-user').value.trim(), password: $('login-pass').value, inbox: $('login-inbox').value.trim() }); });
+$('login-form').addEventListener('submit', (e) => { e.preventDefault(); sendLogin({ username: $('login-user').value.trim(), password: $('login-pass').value, totp: $('login-totp').value.trim() || undefined, inbox: $('login-inbox').value.trim() }); });
 $('login-remove').addEventListener('click', () => sendLogin({ remove: true }));
-$('login-cancel').addEventListener('click', () => { $('login-pass').value = ''; $('login-dialog').close(); });
+$('login-cancel').addEventListener('click', () => { $('login-pass').value = ''; $('login-totp').value = ''; $('login-dialog').close(); });
 $('range').addEventListener('click', (e) => { if (e.target.dataset.days != null) setRange(Number(e.target.dataset.days)); });
 $('txn-account').addEventListener('change', loadTransactions);
 const setMode = (mode) => { nwMode = mode; localStorage.setItem('nwMode', mode); for (const b of $('nw-mode').children) b.setAttribute('aria-pressed', String(b.dataset.mode === mode)); drawChart(); };

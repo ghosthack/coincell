@@ -10,7 +10,7 @@ import { compareWithLastTime } from './checks.js';
 import { BANKS } from './banks/index.js';
 import { runSync, state } from './sync.js';
 import { getInsights } from './insights.js';
-import { saveLogin, removeLogin, getLogin, loginSavedAt, storeName, getSettings, saveSettings, codesInbox, siteInbox, saveSiteInbox } from './logins.js';
+import { saveLogin, removeLogin, getLogin, loginSavedAt, authenticatorCode, makesCodes, storeName, getSettings, saveSettings, codesInbox, siteInbox, saveSiteInbox } from './logins.js';
 
 const PORT = Number(process.env.PORT) || (DEMO ? 4690 : 4680); // demo and real can run side by side
 // By default coincell answers only on this machine. With "lan": true in the data folder's
@@ -114,9 +114,11 @@ const server = http.createServer(async (req, res) => {
       const site = url.searchParams.get('site');
       if (!BANKS.some((b) => b.id === site)) return json(res, 400, { error: 'Unknown institution' });
       const login = getLogin(site);
-      return json(res, 200, login ? { ...login, inbox: codesInbox(site) } : { saved: false });
+      // The setup key for authenticator codes stays here; the extension is only told that there is one.
+      return json(res, 200, login ? { username: login.username, password: login.password, savedAt: login.savedAt, makesCodes: Boolean(login.totp), inbox: codesInbox(site) } : { saved: false });
     }
-    if (route === 'GET /ext/code') return json(res, 200, { code: takeCode(url.searchParams.get('site')) });
+    // A code for a site that is asking for one: one typed on the dashboard, or one made here from a saved setup key.
+    if (route === 'GET /ext/code') { const site = url.searchParams.get('site'); return json(res, 200, { code: takeCode(site), made: authenticatorCode(site) }); }
     if (route === 'POST /api/code') {   // a code typed on the dashboard, for a site that is waiting for one
       const { site, code } = await readBody(req);
       if (progressBy[site]?.state !== 'needs-code') return json(res, 400, { error: 'That institution is not waiting for a code' });
@@ -125,11 +127,11 @@ const server = http.createServer(async (req, res) => {
       return json(res, 200, { ok: true });
     }
     if (route === 'POST /api/logins') {
-      const { site, username, password, inbox, remove } = await readBody(req);
+      const { site, username, password, inbox, remove, totp: setupKey } = await readBody(req);
       if (!BANKS.some((b) => b.id === site)) return json(res, 400, { error: 'Unknown institution' });
       if (inbox && !/^[^@\s]+@[^@\s]+$/.test(inbox)) return json(res, 400, { error: 'That inbox does not look like an email address' });
       // The inbox can be changed by itself, without typing the password again.
-      if (remove) removeLogin(site); else if (username || password || !getLogin(site)) saveLogin(site, username, password);
+      if (remove) removeLogin(site); else if (username || password || setupKey || !getLogin(site)) saveLogin(site, username, password, setupKey || undefined);
       if (inbox !== undefined) saveSiteInbox(site, remove ? '' : inbox);
       return json(res, 200, { ok: true });
     }
@@ -142,7 +144,7 @@ const server = http.createServer(async (req, res) => {
     if (route === 'GET /api/status') {
       const { asOf, last } = getImports(), ext = extension();
       return json(res, 200, { extension: ext.connected, extensionVersion: ext.version, active: active() || state.running, loginStore: storeName, codesInbox: DEMO ? codesInbox().address : getSettings().codesInbox ?? '',
-        institutions: BANKS.map((b) => ({ id: b.id, name: b.name, asOf: asOf.get(b.id) ?? null, last: last.get(b.id) ?? null, progress: progressBy[b.id] ?? null, canSignIn: ext.signIn.includes(b.id), loginSavedAt: ext.signIn.includes(b.id) ? loginSavedAt(b.id) : null, inbox: DEMO ? '' : siteInbox(b.id),
+        institutions: BANKS.map((b) => ({ id: b.id, name: b.name, asOf: asOf.get(b.id) ?? null, last: last.get(b.id) ?? null, progress: progressBy[b.id] ?? null, canSignIn: ext.signIn.includes(b.id), loginSavedAt: ext.signIn.includes(b.id) ? loginSavedAt(b.id) : null, makesCodes: ext.signIn.includes(b.id) && makesCodes(b.id), inbox: DEMO ? '' : siteInbox(b.id),
           readBy: ext.sites.includes(b.id) || b.viaExtension ? 'extension' : b.needsBrowser ? 'browser' : 'file' })) });
     }
     if (route === 'POST /api/refresh') {

@@ -46,7 +46,7 @@
 <main>
   <p><a href="/">← coincell</a></p>
   <h1>Signing in to a site that wants an authenticator code</h1>
-  <p class="lead">Some sites ask for a 6-digit code from an authenticator after the password. This page shows what happens today, the two ways to close the loop, and why the code cannot simply be taken from the password manager that already has it.</p>
+  <p class="lead">Some sites ask for a 6-digit code from an authenticator after the password. This page shows what happens with no setup, the two ways to close the loop, and why the code cannot simply be taken from the password manager that already has it.</p>
 
   <div class="legend">
     <span><span class="tag auto">automatic</span> coincell does it</span>
@@ -56,7 +56,7 @@
 
   <div class="panels">
     <section class="panel">
-      <h2>Today</h2>
+      <h2>Without either</h2>
       <div class="sub">One step is yours, each time the site asks for a code.</div>
       <div class="flow">
         <div class="step auto"><span class="tag auto">automatic</span><b>Refresh starts</b><small>The extension opens the site's sign-in page.</small></div>
@@ -75,7 +75,7 @@
     </section>
 
     <section class="panel">
-      <h2>Later, option A: coincell makes the code</h2>
+      <h2>Option A: coincell makes the code</h2>
       <div class="sub">Closed loop. One setup step, then nothing.</div>
       <div class="flow">
         <div class="step you"><span class="tag you">once</span><b>Give coincell the setup key</b><small>The same key your password manager was given. Typed into Settings, kept in the Keychain beside the login.</small></div>
@@ -92,7 +92,7 @@
     </section>
 
     <section class="panel">
-      <h2>Later, option B: codes by email</h2>
+      <h2>Option B: codes by email</h2>
       <div class="sub">Closed loop too, if the site offers email as its second step.</div>
       <div class="flow">
         <div class="step you"><span class="tag you">once</span><b>Switch the site from authenticator to email codes</b><small>In the site's own security settings, pointing at the inbox coincell reads.</small></div>
@@ -141,12 +141,12 @@
     <div class="scroll">
     <table>
       <tr><th></th><th>Setup, once</th><th>Each refresh</th><th>Your own logins to the site</th><th>Can stall when</th></tr>
-      <tr><td><b>Today</b></td><td>None</td><td>Nothing while remembered; otherwise type 6 digits</td><td>Unchanged</td><td>You are not around to type the code</td></tr>
+      <tr><td><b>Without either</b></td><td>None</td><td>Nothing while remembered; otherwise type 6 digits</td><td>Unchanged</td><td>You are not around to type the code</td></tr>
       <tr><td><b>A: coincell makes the code</b></td><td>Enter the setup key in Settings</td><td>Nothing</td><td>Unchanged</td><td>The site re-issues the key (then enter the new one)</td></tr>
       <tr><td><b>B: codes by email</b></td><td>Change the site's security setting</td><td>Nothing</td><td>You wait for an email instead of opening the authenticator</td><td>Mail is slow, or the site does not offer email</td></tr>
     </table>
     </div>
-    <p class="foot">Either closed loop can be used per site: A where a site insists on an authenticator, B where it emails. Option A is not built yet; reading emailed codes is built and tested against the demo inbox, not yet against a real one.</p>
+    <p class="foot">Either closed loop can be used per site: A where a site insists on an authenticator, B where it emails. Both are built and tested against the made-up sites; neither has yet been proven against every real one.</p>
   </section>
 </main>
 </body>
