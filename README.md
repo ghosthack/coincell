@@ -50,6 +50,9 @@ activity from that site and hands them to coincell on the same computer. Nothing
 3. Log in to a site, then press the coincell icon and **Send this site**, or **Send all open sites** to do every
    open tab at once.
 
+After changing the extension's files, Chrome keeps running the old code, even across a restart. coincell works
+around this; see [Getting Chrome to run the extension's new code](docs/extension-reload.md).
+
 The dashboard and the extension also talk to each other. **Refresh all** on the dashboard asks the extension to
 open each institution in a background tab and read it; one you are not logged in to is left open on its login
 page and marked as needing a login. And logging in to a known site is itself the cue to read it, with nothing to
