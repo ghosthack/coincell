@@ -1,4 +1,4 @@
-import { SITES, siteFor } from './sites.js';
+import { SITES, TARGETS, siteFor } from './sites.js';
 
 const $ = (id) => document.getElementById(id);
 $('version').textContent = chrome.runtime.getManifest().version;
@@ -18,8 +18,9 @@ const isWeb = /^https?:/.test(tab?.url ?? '');
 const site = siteFor(tab?.url);
 const origin = isWeb ? new URL(tab.url).origin : null;
 
-$('site').textContent = site ? site.name : isWeb ? `${new URL(tab.url).hostname} (not known yet)` : 'No website in this tab';
-$('hint').textContent = site ? (site.capture ? 'Log in first. This tab will move through the pages it needs by itself.' : 'Log in to the site first if you have not.') : isWeb ? 'coincell does not know this site yet. Record it so a script can be written.' : '';
+const dashboard = isWeb && Object.values(TARGETS).includes(new URL(tab.url).origin);   // the tab is coincell itself, not a bank
+$('site').textContent = site ? `This tab: ${site.name}` : dashboard ? 'This tab: coincell itself' : isWeb ? `${new URL(tab.url).hostname}: not supported yet` : 'No website in this tab';
+$('hint').textContent = site ? (site.capture ? 'Log in first. This tab will move through the pages it needs by itself.' : 'Log in to the site first if you have not.') : dashboard ? 'This is the coincell dashboard. Open one of your banks in a tab to send it.' : isWeb ? 'coincell cannot read this site yet. Record it with the site recorder so that support can be added.' : '';
 $('send').disabled = !site;
 
 
