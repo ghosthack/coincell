@@ -276,8 +276,7 @@ let lastSeenImport = null;   // null until the first look, so the first look doe
 function standing(i) {   // one phrase for where an institution stands, with a mark that is not colour alone
   const p = i.progress;
   if (p?.state === 'queued' || p?.state === 'working') return [el('span', { class: 'mark' }, '… '), p.message || 'Working'];
-  if (p?.state === 'needs-code') return [el('span', { class: 'mark' }, '→ '), p.message,
-    el('form', { class: 'code-form', 'data-code': i.id }, el('input', { class: 'code-input', inputmode: 'numeric', autocomplete: 'one-time-code', placeholder: 'code', 'aria-label': `Sign-in code for ${i.name}`, maxlength: 10 }), el('button', { class: 'small' }, 'Enter'))];
+  if (p?.state === 'needs-code') return [el('span', { class: 'mark' }, '→ '), 'Needs a code: enter it under Settings'];
   if (p?.state === 'needs-login') return [el('span', { class: 'mark' }, '→ '), 'Needs a login in Chrome'];
   if (p?.state === 'failed') return [el('span', { class: 'mark bad' }, '✕ '), p.message];
   if (!i.last) return [el('span', { class: 'muted' }, 'Never read')];
@@ -300,17 +299,18 @@ function showStanding(st) {
   // Settings: one row per institution the extension can sign in to.
   table($('logins'), [
     // Two columns, so it fits a phone: the name with its details underneath, and the button.
-    { label: 'Institution', get: (r) => [r.name, el('div', { class: 'muted' }, r.isDefault ? `Codes are read from ${st.codesInbox || 'the first Gmail signed in to in Chrome'}`
-      : `${r.loginSavedAt ? `Login saved ${ago(r.loginSavedAt)}` : 'No login saved'} · ${r.makesCodes ? 'makes its own authenticator codes · ' : ''}emailed codes arrive in ${r.inbox || 'the default inbox'}`)] },
+    { label: 'Institution', get: (r) => [r.name, el('div', { class: 'muted' }, r.isDefault ? st.codesInbox || 'First Gmail in Chrome'
+      : [r.loginSavedAt ? `Login saved ${ago(r.loginSavedAt)}` : 'No login', r.makesCodes && 'authenticator', r.inbox && `codes to ${r.inbox}`].filter(Boolean).join(' · ')),
+      // A site waiting for a sign-in code asks for it here, where its login lives.
+      r.progress?.state === 'needs-code' ? el('form', { class: 'code-form', 'data-code': r.id }, el('input', { class: 'code-input', inputmode: 'numeric', autocomplete: 'one-time-code', placeholder: 'code', 'aria-label': `Sign-in code for ${r.name}`, title: r.progress.message, maxlength: 10 }), el('button', { class: 'small' }, 'Enter')) : null] },
     { label: '', num: true, get: (r) => el('button', { class: 'small', 'data-login': r.id }, r.isDefault || r.loginSavedAt ? 'Change' : 'Save a login…') },
   ], st.institutions.some((i) => i.canSignIn) ? [{ id: DEFAULT, name: 'Default inbox', isDefault: true }, ...st.institutions.filter((i) => i.canSignIn)] : [], st.extension ? 'The extension cannot sign in to any of your institutions yet.' : 'Open Chrome with the coincell extension loaded to set this up.');
-  $('store-note').textContent = `Logins are kept in ${st.loginStore}.`;
   const busy = st.institutions.filter((i) => ['queued', 'working'].includes(i.progress?.state)).length;
   const login = st.institutions.filter((i) => i.progress?.state === 'needs-login').map((i) => i.name);
   const code = st.institutions.filter((i) => i.progress?.state === 'needs-code').map((i) => i.name);
   const stale = st.institutions.map((i) => i.last?.at).filter(Boolean).sort()[0];
   $('refresh').disabled = st.active;
-  $('status').textContent = code.length ? `${code.join(', ')} needs a code: see Institutions` : busy ? `Refreshing ${busy} of ${st.institutions.length}…` : login.length ? `Log in to ${login.join(', ')} in Chrome` : stale ? `Oldest refresh ${ago(stale)}` : '';
+  $('status').textContent = code.length ? `${code.join(', ')} needs a code: enter it under Settings` : busy ? `Refreshing ${busy} of ${st.institutions.length}…` : login.length ? `Log in to ${login.join(', ')} in Chrome` : stale ? `Oldest refresh ${ago(stale)}` : '';
 }
 
 async function watch() {   // follow a refresh to its end, then show the new numbers
@@ -326,7 +326,7 @@ async function refresh(bank) {
 }
 $('refresh').addEventListener('click', () => refresh('all'));
 $('institutions').addEventListener('click', (e) => { if (e.target.dataset.bank) refresh(e.target.dataset.bank); });
-$('institutions').addEventListener('submit', async (e) => {
+$('logins').addEventListener('submit', async (e) => {
   e.preventDefault();
   const form = e.target.closest('[data-code]'), input = form.querySelector('input');
   try { await post('/api/code', { site: form.dataset.code, code: input.value.trim() }); input.blur(); form.replaceChildren('Code sent to the site…'); } catch (err) { input.setCustomValidity(err.message); input.reportValidity(); input.setCustomValidity(''); }
