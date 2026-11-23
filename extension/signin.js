@@ -146,6 +146,11 @@ function onPage(step, data) {
     // The username gets the same add-and-remove treatment as the password: some forms only take in a field that saw keys pressed.
     // `trace` says, step by step, whether each field held something (never what), for working out a form that drops a value.
     const trace = [`user field ${user ? `#${user.id.replace(/\d/g, '9')}` : 'not found'}`], held = (tag) => trace.push(`${tag}: user ${user ? Boolean(user.value) : '-'}, password ${Boolean(pass.value)}`);
+    if (data.keyed) {   // a site marked as wanting every field key by key
+      if (user) { keyed(user, data.username); held('user keyed'); }
+      keyed(pass, data.password); held('password keyed'); send(pass); held('sent');
+      return { done: true, trace };
+    }
     if (user && user.value !== data.username) {
       put(user, data.username); held('user set');
       if (!user.value && data.nudge) { keyed(user, data.username); held('user keyed'); }
@@ -297,7 +302,7 @@ export async function signIn(site, tab, say, { whateverTheAddress = false } = {}
       if (recent.length >= 3 && site.target === 'real') return { ok: false, message: 'The saved login has been tried three times in the last hour, so it is being left alone for now. Log in yourself, or try again later.' };
       await chrome.storage.local.set({ tries: { ...tries, [key]: [...recent, Date.now()] } });
     }
-    if (has === 'password') { await say('Signing in'); since = Date.now(); const filled = await run('password', { username: login.username, password: login.password, nudge: !plainFill }); lastNoted = ''; await note(`filled (${(filled[0]?.result?.trace ?? []).join('; ')})`); }
+    if (has === 'password') { await say('Signing in'); since = Date.now(); const filled = await run('password', { username: login.username, password: login.password, nudge: !plainFill, keyed: Boolean(site.keyed) }); lastNoted = ''; await note(`filled (${(filled[0]?.result?.trace ?? []).join('; ')})`); }
     if (has === 'code') {
       // Say what the site itself asks for, in its own words (its heading), so you know which code it wants.
       const asks = await run('outline').then((r) => r[0]?.result?.headings?.[0]).catch(() => '');

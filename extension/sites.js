@@ -22,6 +22,7 @@ export const TARGETS = { demo: 'http://localhost:4690', real: 'http://localhost:
 //   signIn:   the addresses of the site's own sign-in pages; a saved login is filled in nowhere else
 //   code:     who the site's emailed codes come from, so only that mail is looked at
 //   allow:    other addresses of the site Chrome must be told the extension may use
+//   keyed:    enter the login one key at a time, for a site whose form does not take a value set in one go
 const sender = (domain) => ({ from: new RegExp(`@([a-z0-9-]+\\.)*${domain.replace(/\./g, '\\.')}$`, 'i') });
 export const SITES = [
   { id: 'fidelity', name: 'Fidelity', match: /^https:\/\/digital\.fidelity\.com\//, capture: fidelity, target: 'real',
@@ -38,7 +39,7 @@ export const SITES = [
     signIn: /^https:\/\/(www|online)\.citi\.com\//, code: sender('citi.com'), allow: ['https://www.citi.com/*'] },
   { id: 'newrez', name: 'Newrez', match: /^https:\/\/myaccount\.newrez\.com\//, file: 'sites/newrez.js', target: 'real',
     home: 'https://myaccount.newrez.com/dashboard', loggedIn: /^https:\/\/myaccount\.newrez\.com\/dashboard/,
-    signIn: /^https:\/\/myaccount\.newrez\.com\//, code: sender('newrez.com') },
+    signIn: /^https:\/\/myaccount\.newrez\.com\//, code: sender('newrez.com'), keyed: true },
   { id: 'newrez', name: 'Newrez (account details)', match: /^https:\/\/servicing\.newrez\.com\//, capture: newrezServicing, target: 'real',
     loggedIn: /^https:\/\/servicing\.newrez\.com\/servicing\/[^/]+\/(dashboard|payments)/, ownTab: true },
   { id: 'harborline', name: 'Harborline Bank (demo)', match: /^http:\/\/localhost:4701\//, file: 'sites/demo/harborline.js', target: 'demo',
