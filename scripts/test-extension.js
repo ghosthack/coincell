@@ -100,6 +100,18 @@ try {
   const one = (s, id) => s.institutions.find((i) => i.id === id);
   const settledAll = (s) => !s.active && s.institutions.filter((i) => i.readBy === 'extension').every((i) => ['done', 'needs-login', 'failed'].includes(i.progress?.state));
   for (const [site, password] of Object.entries(passwords)) await dash('/api/logins', { site, username: 'demo', password });
+  // First the proof that the two careless sites are careless: with the password only set, and the
+  // add-and-remove step left out, Kestrel (wants an edit) and Copperleaf (wants focus and a key press) refuse it.
+  await worker.evaluate(() => chrome.storage.local.set({ plainFill: true }));
+  for (const [id, port] of [['kestrel', 4702], ['copperleaf', 4703]]) {
+    await tabs[port].goto(`http://localhost:${port}/logout`);
+    await dash('/api/refresh', { bank: id });
+    await until('the first progress', (s) => s.active, 10_000);
+    st = await until('the plain fill to be refused', (s) => !s.active && ['done', 'needs-login', 'failed'].includes(one(s, id).progress?.state), 90_000);
+    console.log(`plain fill  -> ${id} ${one(st, id).progress.state}: ${one(st, id).progress.message}`);
+    if (one(st, id).progress.state !== 'needs-login') fail(`${id} should refuse a password that was only set, never edited`);
+  }
+  await worker.evaluate(() => chrome.storage.local.remove(['plainFill', 'rejected']));
   for (const port of Object.keys(logins)) await tabs[port].goto(`http://localhost:${port}/logout`);
   await new Promise((r) => setTimeout(r, 1000));
   await dash('/api/refresh', { bank: 'all' });

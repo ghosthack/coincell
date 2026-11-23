@@ -56,7 +56,7 @@ function onPage(step, data) {
   if (step === 'user' && user) { put(user, data.username); send(user); }
   if (step === 'password' && pass) {
     if (user && user.value !== data.username) put(user, data.username);
-    put(pass, data.password); nudge(pass); send(pass);
+    put(pass, data.password); if (data.nudge) nudge(pass); send(pass);
   }
   if (step === 'code' && code) {
     // "Remember this device", where offered, means fewer codes later.
@@ -104,7 +104,8 @@ export async function signIn(site, tab, say) {
   const key = `${site.target}:${site.id}`;
   const login = await fetch(`${TARGETS[site.target]}/ext/login?site=${site.id}`, { headers: { 'x-coincell': '1' } }).then((r) => r.json()).catch(() => ({}));
   if (!login.username) return { ok: false, message: login.error };   // no saved login: you log in, as before
-  const { rejected = {} } = await chrome.storage.local.get('rejected');
+  // plainFill is a switch for the tests only: it leaves out the add-and-remove step, to show the careless fake sites do refuse without it.
+  const { rejected = {}, plainFill = false } = await chrome.storage.local.get(['rejected', 'plainFill']);
   if (rejected[key] === login.savedAt) return { ok: false, message: 'The saved login was not accepted last time, so it was not tried again. Log in yourself, or save the login again.' };
 
   const run = (step, data = {}) => chrome.scripting.executeScript({ target: { tabId: tab.id }, func: onPage, args: [step, data] });
@@ -129,7 +130,7 @@ export async function signIn(site, tab, say) {
       return { ok: false, message: has === 'code' ? 'The site did not accept the emailed code. Enter it yourself.' : UNKNOWN };
     }
     if (has === 'user') { await say('Signing in'); await run('user', { username: login.username }); }
-    if (has === 'password') { await say('Signing in'); since = Date.now(); await run('password', { username: login.username, password: login.password }); }
+    if (has === 'password') { await say('Signing in'); since = Date.now(); await run('password', { username: login.username, password: login.password, nudge: !plainFill }); }
     if (has === 'code') {
       if (!site.code || !login.inbox) return { ok: false, message: 'The site asked for a code. Name the inbox its codes are emailed to on the coincell dashboard, or enter the code yourself.' };
       await say('Waiting for the emailed code');
