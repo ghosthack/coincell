@@ -43,7 +43,7 @@ try {
     4701: async (t) => { await t.fill('#username', 'demo'); await t.fill('#password', 'harbor-demo'); await t.click('#sign-in'); await t.fill('#code', (await (await fetch('http://localhost:4706/mail/u/0/feed/atom')).text()).match(/security code is (\d{6})/)[1]); await t.click('#verify'); await t.waitForSelector('.acct'); },
     4702: async (t) => { await t.fill('#user-id', 'demo'); await t.locator('#pass').pressSequentially('kestrel-demo'); await t.click('#login-form button'); await t.waitForSelector('#card-summary'); },
     4703: async (t) => { await t.fill('input[name="userId"]', 'demo'); await t.locator('input[name="passcode"]').pressSequentially('copper-demo'); await t.click('button[type="submit"]'); await t.click('#not-now'); await t.waitForSelector('[data-field="current-balance"]'); },
-    4704: async (t) => { await t.fill('#username', 'demo'); await t.click('#next'); await t.fill('#password', 'meridian-demo'); await t.click('#log-in'); await t.waitForSelector('#portfolio'); },
+    4704: async (t) => { await t.fill('#username', 'demo'); await t.click('#next'); await t.fill('#password', 'meridian-demo'); await t.click('#log-in'); await t.fill('#code', await t.locator('#demo-code').innerText()); await t.click('#verify'); await t.waitForSelector('#portfolio'); },
     4705: async (t) => { await t.fill('#user', 'demo'); await t.fill('#pw', 'lakeshore-demo'); await t.click('#signin'); await t.fill('#answer', await t.locator('#demo-answer').innerText()); await t.click('#continue'); await t.waitForSelector('#loan-summary'); },
   };
   const tabs = {};
@@ -94,8 +94,9 @@ try {
 
   // Saved logins: with every site logged out, a refresh signs in by itself where it can.
   //   Harborline emails a code, Kestrel's form only notices an edited password, Copperleaf asks to
-  //   remember the device, Meridian asks for the username and password on separate pages, and
-  //   Lakeshore asks a security question, which nothing here can answer.
+  //   remember the device, Meridian asks for the username and password on separate pages and then
+  //   texts a code (typed on the dashboard, as you would from your phone), and Lakeshore asks a
+  //   security question, which nothing here can answer.
   const passwords = { harborline: 'harbor-demo', kestrel: 'kestrel-demo', copperleaf: 'copper-demo', meridian: 'meridian-demo', lakeshore: 'lakeshore-demo' };
   const one = (s, id) => s.institutions.find((i) => i.id === id);
   const settledAll = (s) => !s.active && s.institutions.filter((i) => i.readBy === 'extension').every((i) => ['done', 'needs-login', 'failed'].includes(i.progress?.state));
@@ -116,6 +117,12 @@ try {
   await new Promise((r) => setTimeout(r, 1000));
   await dash('/api/refresh', { bank: 'all' });
   await until('the first progress', (s) => s.active, 10_000);
+  // Meridian's texted code: when the dashboard says it is waiting for one, type it in, as a person would.
+  st = await until('Meridian to ask for its code', (s) => one(s, 'meridian').progress?.state === 'needs-code', 120_000);
+  console.log('texted code -> meridian:', one(st, 'meridian').progress.message);
+  const codePage = context.pages().find((pg) => /localhost:4704\/login\/code/.test(pg.url()));
+  if ((await dash('/api/code', { site: 'kestrel', code: '123456' })).ok) fail('a code must only be accepted for a site that is waiting for one');
+  await dash('/api/code', { site: 'meridian', code: await codePage.locator('#demo-code').innerText() });
   st = await until('the refresh that signs in', settledAll, 150_000);
   console.log('signs in    ->', states(st));
   for (const id of ['harborline', 'kestrel', 'copperleaf', 'meridian']) if (one(st, id).progress.state !== 'done') fail(`${id} should have been signed in to and read: ${one(st, id).progress.message}`);

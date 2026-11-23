@@ -5,7 +5,7 @@
 //                          notices a password that was edited, as some carelessly built sites do
 //   4703 Copperleaf Card   server-rendered, "remember this device" step, CSV download; a login form that
 //                          refuses a passcode unless its field was clicked into and typed in
-//   4704 Meridian Wealth   two-step login, JSON API behind the session cookie
+//   4704 Meridian Wealth   two-step login, then a texted code; JSON API behind the session cookie
 //   4705 Lakeshore Home Loans  password + security question, payment history split into principal/interest/escrow
 //   4706 Demo Mail         the inbox the fake sites email their codes to, with the same feed Gmail offers
 import http from 'node:http';
@@ -239,6 +239,15 @@ createSite({ port: 4704, name: 'Meridian Wealth', color: '#1d6b45', handler: (c)
       <label>Password<input name="password" id="password" type="password"></label><button id="log-in">Log in</button></form></div>`, err ? 401 : 200);
     if (method !== 'POST') return page();
     if (session.user !== 'demo' || form.password !== 'meridian-demo') return page('Your username or password is incorrect.');
+    session.stage = 'code'; session.code = String(Math.floor(100000 + Math.random() * 900000)); return c.redirect('/login/code');
+  }
+  if (path === '/login/code') {   // a code "texted" to a phone: no inbox to read it from, so a person has to type it
+    if (session?.stage !== 'code') return c.redirect('/login');
+    const page = (err = '') => c.html(`<div class="box"><h2>Enter your code</h2><p>We texted a 6-digit code to (•••) •••-0142.</p>${err && `<p class="err">${err}</p>`}
+      <form method="post" action="/login/code"><label>Verification code<input name="code" id="code" inputmode="numeric" autocomplete="one-time-code"></label><button id="verify">Verify</button></form>
+      <p>Demo: nothing is really texted. The message would say <b id="demo-code">${session.code}</b>.</p></div>`, err ? 401 : 200);
+    if (method !== 'POST') return page();
+    if (form.code !== session.code) return page('That code is not right.');
     session.stage = 'ok'; return c.redirect('/portfolio');
   }
   const authed = session?.stage === 'ok';

@@ -276,6 +276,8 @@ let lastSeenImport = null;   // null until the first look, so the first look doe
 function standing(i) {   // one phrase for where an institution stands, with a mark that is not colour alone
   const p = i.progress;
   if (p?.state === 'queued' || p?.state === 'working') return [el('span', { class: 'mark' }, '… '), p.message || 'Working'];
+  if (p?.state === 'needs-code') return [el('span', { class: 'mark' }, '→ '), p.message,
+    el('form', { class: 'code-form', 'data-code': i.id }, el('input', { class: 'code-input', inputmode: 'numeric', autocomplete: 'one-time-code', placeholder: 'code', 'aria-label': `Sign-in code for ${i.name}`, maxlength: 10 }), el('button', { class: 'small' }, 'Enter'))];
   if (p?.state === 'needs-login') return [el('span', { class: 'mark' }, '→ '), 'Needs a login in Chrome'];
   if (p?.state === 'failed') return [el('span', { class: 'mark bad' }, '✕ '), p.message];
   if (!i.last) return [el('span', { class: 'muted' }, 'Never read')];
@@ -285,6 +287,7 @@ function standing(i) {   // one phrase for where an institution stands, with a m
 }
 
 function showStanding(st) {
+  if (document.activeElement?.classList.contains('code-input')) return;   // you are typing a code: leave the table alone
   $('ext-note').textContent = st.institutions.some((i) => i.readBy === 'extension') ? (st.extension ? `Browser extension ${st.extensionVersion ?? ''} connected.` : 'Browser extension not connected: open Chrome with the coincell extension loaded.') : '';
   table($('institutions'), [
     { label: 'Institution', get: (r) => r.name },
@@ -304,9 +307,10 @@ function showStanding(st) {
   $('store-note').textContent = `Logins are kept in ${st.loginStore}.`;
   const busy = st.institutions.filter((i) => ['queued', 'working'].includes(i.progress?.state)).length;
   const login = st.institutions.filter((i) => i.progress?.state === 'needs-login').map((i) => i.name);
+  const code = st.institutions.filter((i) => i.progress?.state === 'needs-code').map((i) => i.name);
   const stale = st.institutions.map((i) => i.last?.at).filter(Boolean).sort()[0];
   $('refresh').disabled = st.active;
-  $('status').textContent = busy ? `Refreshing ${busy} of ${st.institutions.length}…` : login.length ? `Log in to ${login.join(', ')} in Chrome` : stale ? `Oldest refresh ${ago(stale)}` : '';
+  $('status').textContent = code.length ? `${code.join(', ')} needs a code: see Institutions` : busy ? `Refreshing ${busy} of ${st.institutions.length}…` : login.length ? `Log in to ${login.join(', ')} in Chrome` : stale ? `Oldest refresh ${ago(stale)}` : '';
 }
 
 async function watch() {   // follow a refresh to its end, then show the new numbers
@@ -322,6 +326,11 @@ async function refresh(bank) {
 }
 $('refresh').addEventListener('click', () => refresh('all'));
 $('institutions').addEventListener('click', (e) => { if (e.target.dataset.bank) refresh(e.target.dataset.bank); });
+$('institutions').addEventListener('submit', async (e) => {
+  e.preventDefault();
+  const form = e.target.closest('[data-code]'), input = form.querySelector('input');
+  try { await post('/api/code', { site: form.dataset.code, code: input.value.trim() }); input.blur(); form.replaceChildren('Code sent to the site…'); } catch (err) { input.setCustomValidity(err.message); input.reportValidity(); input.setCustomValidity(''); }
+});
 $('logins').addEventListener('click', (e) => { if (e.target.dataset.login) askLogin(e.target.dataset.login); });
 
 // ---------- saved logins ----------

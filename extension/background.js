@@ -215,7 +215,7 @@ async function refreshOne(site) {
     await front(tab);
     if (!site.loggedIn.test(tab.url ?? '')) {
       // With a login saved in coincell, sign in with it (see signin.js); otherwise it is yours to do.
-      const signed = await signIn(site, tab, (message) => say(site, 'working', message));
+      const signed = await signIn(site, tab, (message, state = 'working') => say(site, state, message));
       if (!signed.ok) return void await awaitLogin(signed.message ?? (opened ? 'Log in to this site in the tab that was opened; it will be read as soon as you are in' : 'Log in to this site'));
       tab = await settled(tab.id);
     }

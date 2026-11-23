@@ -13,6 +13,8 @@ export default {
       await page.click('#next');
       await page.fill('#password', 'meridian-demo');
       await page.click('#log-in');
+      await page.fill('#code', await page.locator('#demo-code').innerText());   // the texted code, which the demo site shows on the page
+      await page.click('#verify');
     }
     await page.waitForSelector('#portfolio');
     const get = async (path) => {

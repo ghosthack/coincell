@@ -85,15 +85,22 @@ async function readInbox(inbox) {
   return null;
 }
 
-async function emailedCode(site, inbox, since) {
-  for (const end = Date.now() + 120_000; Date.now() < end; await sleep(4000)) {
+// A code can come two ways: by email, which is read from the inbox, or typed by you on the coincell
+// dashboard (for one texted to your phone). Both are watched until one turns up.
+async function awaitCode(site, inbox, since) {
+  const base = TARGETS[site.target];
+  let inboxOk = true;
+  for (const end = Date.now() + 5 * 60_000, start = Date.now(); Date.now() < end; await sleep(3000)) {
+    const typed = await fetch(`${base}/ext/code?site=${site.id}`, { headers: { 'x-coincell': '1' } }).then((r) => r.json()).catch(() => ({}));
+    if (typed.code) return { code: typed.code };
+    if (!site.code || !inbox) continue;
     const mail = await readInbox(inbox);
-    if (!mail) return { message: `The Gmail inbox for emailed codes${inbox.address ? ` (${inbox.address})` : ''} could not be read. Sign in to it in this Chrome, and press "Allow sign-in help" in the extension's popup.` };
-    const found = mail.filter((m) => site.code.from.test(m.from) && m.at >= since - 15_000).sort((a, b) => b.at - a.at)
+    inboxOk = Boolean(mail);
+    const found = (mail ?? []).filter((m) => site.code.from.test(m.from) && m.at >= since - 15_000).sort((x, y) => y.at - x.at)
       .map((m) => (site.code.pattern ?? /\b\d{6,8}\b/).exec(m.text)?.[0]).find(Boolean);
     if (found) return { code: found };
   }
-  return { message: 'The site asked for an emailed code, and none arrived in the inbox within two minutes. Enter it yourself.' };
+  return { message: `The site asked for a code, and none was emailed${inboxOk ? '' : ' (the Gmail inbox could not be read)'} or typed in within five minutes. Enter it on the site yourself.` };
 }
 
 const UNKNOWN = 'The site is asking something coincell cannot answer. Finish logging in yourself; it will be read as soon as you are in.';
@@ -137,11 +144,11 @@ export async function signIn(site, tab, say) {
     if (has === 'user') { await say('Signing in'); await run('user', { username: login.username }); }
     if (has === 'password') { await say('Signing in'); since = Date.now(); await run('password', { username: login.username, password: login.password, nudge: !plainFill }); }
     if (has === 'code') {
-      if (!site.code || !login.inbox) return { ok: false, message: 'The site asked for a code. Name the inbox its codes are emailed to on the coincell dashboard, or enter the code yourself.' };
-      await say('Waiting for the emailed code');
-      const mail = await emailedCode(site, login.inbox, since);
-      if (!mail.code) return { ok: false, message: mail.message };
-      await run('code', { code: mail.code });
+      await say('The site asks for a code. An emailed one is entered by itself; type a texted one here.', 'needs-code');
+      const got = await awaitCode(site, login.inbox, since);
+      if (!got.code) return { ok: false, message: got.message };
+      await say('Entering the code');
+      await run('code', { code: got.code });
     }
     if (has === 'remember') await run('remember');
     acted.add(has);

@@ -13,7 +13,12 @@ let lastSeen = 0, known = [], signIn = [], version = null, runs = 0;
 export const progressBy = {};
 
 export const extension = () => ({ connected: Date.now() - lastSeen < 45_000, sites: known, signIn, version });   // signIn: the sites it can log in to with a saved login
-export const active = () => Object.values(progressBy).some((p) => p.state === 'queued' || p.state === 'working');
+export const active = () => Object.values(progressBy).some((p) => ['queued', 'working', 'needs-code'].includes(p.state));
+
+// A sign-in code typed on the dashboard (one that was texted to you, say), waiting for the extension to collect it.
+const codes = new Map();
+export const offerCode = (site, code) => codes.set(site, { code, at: Date.now() });
+export const takeCode = (site) => { const c = codes.get(site); codes.delete(site); return c && Date.now() - c.at < 5 * 60_000 ? c.code : null; };
 
 export function poll(res, sites, canSignIn, v, send) {
   lastSeen = Date.now();
@@ -40,6 +45,6 @@ setInterval(() => {
   for (const [site, p] of Object.entries(progressBy)) {
     const age = Date.now() - Date.parse(p.at);
     if (p.state === 'queued' && age > 40_000) setProgress(site, 'failed', 'The browser extension did not pick this up. Is Chrome open with the coincell extension loaded?');
-    if (p.state === 'working' && age > 10 * 60_000) setProgress(site, 'failed', 'This took too long and was given up on.');
+    if (['working', 'needs-code'].includes(p.state) && age > 10 * 60_000) setProgress(site, 'failed', 'This took too long and was given up on.');
   }
 }, 5000).unref();

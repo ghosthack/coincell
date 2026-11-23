@@ -5,7 +5,7 @@ import fs from 'node:fs';
 import path from 'node:path';
 import { PUBLIC_DIR, DEMO, ROOT, dataPath } from './paths.js';
 import { getAccounts, getNetWorth, getNetWorthByType, getHistoryNote, getHoldings, getTransactions, getCashflow, saveSnapshot, linkTransfers, removeAccounts, bankSummary, recordImport, getImports } from './db.js';
-import { poll, command, extension, active, progressBy, setProgress, nextRun } from './bridge.js';
+import { poll, command, extension, active, progressBy, setProgress, nextRun, offerCode, takeCode } from './bridge.js';
 import { compareWithLastTime } from './checks.js';
 import { BANKS } from './banks/index.js';
 import { runSync, state } from './sync.js';
@@ -115,6 +115,14 @@ const server = http.createServer(async (req, res) => {
       if (!BANKS.some((b) => b.id === site)) return json(res, 400, { error: 'Unknown institution' });
       const login = getLogin(site);
       return json(res, 200, login ? { ...login, inbox: codesInbox(site) } : { saved: false });
+    }
+    if (route === 'GET /ext/code') return json(res, 200, { code: takeCode(url.searchParams.get('site')) });
+    if (route === 'POST /api/code') {   // a code typed on the dashboard, for a site that is waiting for one
+      const { site, code } = await readBody(req);
+      if (progressBy[site]?.state !== 'needs-code') return json(res, 400, { error: 'That institution is not waiting for a code' });
+      if (!/^[A-Za-z0-9]{4,10}$/.test(String(code ?? '').trim())) return json(res, 400, { error: 'That does not look like a code' });
+      offerCode(site, String(code).trim());
+      return json(res, 200, { ok: true });
     }
     if (route === 'POST /api/logins') {
       const { site, username, password, inbox, remove } = await readBody(req);
