@@ -1,4 +1,6 @@
 import http from 'node:http';
+import os from 'node:os';
+import { randomBytes, timingSafeEqual } from 'node:crypto';
 import fs from 'node:fs';
 import path from 'node:path';
 import { PUBLIC_DIR, DEMO, ROOT, dataPath } from './paths.js';
@@ -11,7 +13,16 @@ import { getInsights } from './insights.js';
 import { saveLogin, removeLogin, getLogin, loginSavedAt, storeName, getSettings, saveSettings, codesInbox, siteInbox, saveSiteInbox } from './logins.js';
 
 const PORT = Number(process.env.PORT) || (DEMO ? 4690 : 4680); // demo and real can run side by side
-const HOST = '127.0.0.1'; // never expose financial data beyond this machine
+// By default coincell answers only on this machine. With "lan": true in the data folder's
+// settings.json it also answers other devices on your network, and then only to a browser that
+// holds the access key (opened once as /?key=..., kept as a cookie after that). The key is made on
+// first use and printed at start. Whatever the setting, the extension's routes, which include the
+// one that returns a saved login, answer this machine only.
+const LAN = Boolean(getSettings().lan);
+const HOST = LAN ? '0.0.0.0' : '127.0.0.1';
+const lanKey = () => { let key = getSettings().lanKey; if (!key) { key = randomBytes(18).toString('base64url'); saveSettings({ lanKey: key }); } return key; };
+const sameKey = (given) => { const a = Buffer.from(String(given ?? '')), b = Buffer.from(lanKey()); return a.length === b.length && timingSafeEqual(a, b); };
+const isLocal = (req) => ['127.0.0.1', '::1', '::ffff:127.0.0.1'].includes(req.socket.remoteAddress);
 const TYPES = { '.html': 'text/html; charset=utf-8', '.js': 'text/javascript; charset=utf-8', '.css': 'text/css; charset=utf-8', '.png': 'image/png' };
 
 const json = (res, code, body) => {
@@ -32,9 +43,18 @@ const extensionOnDisk = () => { try { return JSON.parse(fs.readFileSync(path.joi
 const server = http.createServer(async (req, res) => {
   try {
     // Reject other hostnames (DNS rebinding) and cross-site writes (CSRF).
-    const host = req.headers.host ?? '';
-    if (host !== `localhost:${PORT}` && host !== `127.0.0.1:${PORT}`) return json(res, 403, { error: 'Forbidden host' });
-    const url = new URL(req.url, `http://${host}`);
+    const host = req.headers.host ?? '', local = isLocal(req);
+    if (local && host !== `localhost:${PORT}` && host !== `127.0.0.1:${PORT}`) return json(res, 403, { error: 'Forbidden host' });
+    const url = new URL(req.url, `http://${host || 'localhost'}`);
+    if (!local) {   // another device on the network: it must hold the access key
+      if (url.pathname.startsWith('/ext/')) return json(res, 403, { error: 'Forbidden' });
+      if (url.searchParams.has('key')) {
+        if (!sameKey(url.searchParams.get('key'))) return json(res, 403, { error: 'Wrong access key' });
+        res.writeHead(302, { location: '/', 'set-cookie': `coincell_key=${lanKey()}; HttpOnly; SameSite=Strict; Path=/; Max-Age=2592000`, 'cache-control': 'no-store' });
+        return res.end();
+      }
+      if (!sameKey(/(?:^|; )coincell_key=([^;]+)/.exec(req.headers.cookie ?? '')?.[1])) return json(res, 403, { error: 'This coincell needs its access key. Open the address with ?key=... once.' });
+    }
     const route = `${req.method} ${url.pathname}`;
 
     if (req.method === 'POST' && req.headers['x-coincell'] !== '1') return json(res, 403, { error: 'Forbidden' });
@@ -170,4 +190,7 @@ const server = http.createServer(async (req, res) => {
   }
 });
 
-server.listen(PORT, HOST, () => console.log(`coincell${DEMO ? ' (demo data)' : ''} running at http://localhost:${PORT}`));
+server.listen(PORT, HOST, () => {
+  console.log(`coincell${DEMO ? ' (demo data)' : ''} running at http://localhost:${PORT}`);
+  if (LAN) for (const a of Object.values(os.networkInterfaces()).flat()) if (a.family === 'IPv4' && !a.internal) console.log(`also on your network at http://${a.address}:${PORT}/?key=${lanKey()}`);
+});

@@ -39,6 +39,14 @@ npm run demo                      # http://localhost:4690, then press "Sync now"
 - `npm run sync -- all`: sync every real institution from the command line, or name one.
 - `npm run record -- <login url>`: log in by hand and click around; writes the shape of every JSON call the bank's site makes (values redacted) to `.data/recordings/`. Use it to write an adapter.
 
+### From another device on your network
+
+coincell answers only on its own computer. To reach the dashboard from a phone or laptop on the same network,
+put `"lan": true` in `.data/settings.json` and restart. The start-up log then prints an address ending in
+`?key=...`; open it once on the other device and the key is kept as a cookie. Without the key nothing is served,
+and the extension's routes, including the one that returns a saved login, never answer other devices. The
+connection is plain HTTP, so use this only on a network you trust.
+
 ## Browser extension
 
 Some institutions refuse automated browsers. The extension in `extension/` works from your everyday Chrome
