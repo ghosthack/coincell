@@ -179,14 +179,16 @@ const busy = new Set();
 const say = (site, state, message, warnings) => post(TARGETS[site.target], '/ext/progress', { site: site.id, state, message, warnings }).catch(() => {});
 const settled = async (tabId, ms = 30_000) => { for (const end = Date.now() + ms; Date.now() < end; await sleep(300)) { if ((await chrome.tabs.get(tabId)).status === 'complete') break; } await sleep(2500); return chrome.tabs.get(tabId); };
 
-// Pages often do nothing while their tab is in the background. So the tabs this extension opens go
-// in a window of their own, where each is the tab in view, and your own windows are left as they are.
+// Pages often do nothing while their tab is out of view. So a tab being worked on is always brought
+// to the front, and the tabs this extension opens go in a window of their own, so that the tabs in
+// your other windows stay where you left them.
+const front = async (tab) => { await chrome.tabs.update(tab.id, { active: true }).catch(() => {}); await chrome.windows.update(tab.windowId, { focused: true }).catch(() => {}); };
 async function openWork(url) {
   const { workWindow } = await chrome.storage.session.get('workWindow');
   if (workWindow != null) {
     try { await chrome.windows.get(workWindow); return await chrome.tabs.create({ windowId: workWindow, url, active: true }); } catch { /* that window was closed */ }
   }
-  const win = await chrome.windows.create({ url, focused: false });
+  const win = await chrome.windows.create({ url, focused: true });
   await chrome.storage.session.set({ workWindow: win.id });
   return win.tabs[0];
 }
@@ -210,6 +212,7 @@ async function refreshOne(site) {
       opened = true;
       await chrome.storage.session.set({ mine: { ...mine, [key]: site.loggedIn.test(tab.url ?? '') ? undefined : tab.id } });
     }
+    await front(tab);
     if (!site.loggedIn.test(tab.url ?? '')) {
       // With a login saved in coincell, sign in with it (see signin.js); otherwise it is yours to do.
       const signed = await signIn(site, tab, (message) => say(site, 'working', message));
