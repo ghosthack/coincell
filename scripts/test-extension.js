@@ -42,7 +42,7 @@ try {
   const logins = {
     4701: async (t) => { await t.fill('#username', 'demo'); await t.fill('#password', 'harbor-demo'); await t.click('#sign-in'); await t.fill('#code', (await (await fetch('http://localhost:4706/mail/u/0/feed/atom')).text()).match(/security code is (\d{6})/)[1]); await t.click('#verify'); await t.waitForSelector('.acct'); },
     4702: async (t) => { await t.fill('#user-id', 'demo'); await t.locator('#pass').pressSequentially('kestrel-demo'); await t.click('#login-form button'); await t.waitForSelector('#card-summary'); },
-    4703: async (t) => { await t.fill('input[name="userId"]', 'demo'); await t.fill('input[name="passcode"]', 'copper-demo'); await t.click('button[type="submit"]'); await t.click('#not-now'); await t.waitForSelector('[data-field="current-balance"]'); },
+    4703: async (t) => { await t.fill('input[name="userId"]', 'demo'); await t.locator('input[name="passcode"]').pressSequentially('copper-demo'); await t.click('button[type="submit"]'); await t.click('#not-now'); await t.waitForSelector('[data-field="current-balance"]'); },
     4704: async (t) => { await t.fill('#username', 'demo'); await t.click('#next'); await t.fill('#password', 'meridian-demo'); await t.click('#log-in'); await t.waitForSelector('#portfolio'); },
     4705: async (t) => { await t.fill('#user', 'demo'); await t.fill('#pw', 'lakeshore-demo'); await t.click('#signin'); await t.fill('#answer', await t.locator('#demo-answer').innerText()); await t.click('#continue'); await t.waitForSelector('#loan-summary'); },
   };

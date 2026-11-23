@@ -32,10 +32,20 @@ function onPage(step, data) {
   if (step === 'look') return { has: pass ? 'password' : code ? 'code' : user ? 'user' : remember ? 'remember' : 'none' };
 
   const told = (el, inputType, text) => el.dispatchEvent(new InputEvent('input', { bubbles: true, inputType, data: text ?? null }));
-  const put = (el, value) => { el.focus(); el.value = value; told(el, 'insertText', value); el.dispatchEvent(new Event('change', { bubbles: true })); };
-  // Some carelessly built pages only count a field as filled once it has been edited. So after the
-  // password is in place, one letter is added to its end and taken away again.
-  const nudge = (el) => { const value = el.value; el.value = `${value}a`; told(el, 'insertText', 'a'); el.value = value; told(el, 'deleteContentBackward'); el.dispatchEvent(new Event('change', { bubbles: true })); };
+  // In a tab you are not looking at, the browser holds back the "focus" notice, so the page is told directly.
+  const enter = (el) => { let noticed = false; const on = () => { noticed = true; }; el.addEventListener('focus', on, { once: true }); el.focus(); el.removeEventListener('focus', on);
+    if (!noticed) { el.dispatchEvent(new FocusEvent('focus')); el.dispatchEvent(new FocusEvent('focusin', { bubbles: true })); } };
+  const key = (el, type, k) => el.dispatchEvent(new KeyboardEvent(type, { bubbles: true, key: k, code: k === 'a' ? 'KeyA' : k }));
+  const put = (el, value) => { enter(el); el.value = value; told(el, 'insertText', value); el.dispatchEvent(new Event('change', { bubbles: true })); };
+  // Some carelessly built pages only count a field as filled once it has been edited, or once a
+  // key was pressed in it. So after the password is in place, one letter is added to its end and
+  // taken away again, and the page is told of both key presses.
+  const nudge = (el) => {
+    const value = el.value;
+    key(el, 'keydown', 'a'); el.value = `${value}a`; told(el, 'insertText', 'a'); key(el, 'keyup', 'a');
+    key(el, 'keydown', 'Backspace'); el.value = value; told(el, 'deleteContentBackward'); key(el, 'keyup', 'Backspace');
+    el.dispatchEvent(new Event('change', { bubbles: true }));
+  };
   const send = (el) => {
     el.blur();
     const inForm = el.form ? buttons(el.form).filter((b) => b.type === 'submit') : [];

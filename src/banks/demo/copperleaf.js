@@ -14,7 +14,7 @@ export default {
     if (page.url().includes('/login')) {
       log('Signing on');
       await page.fill('input[name="userId"]', 'demo');
-      await page.fill('input[name="passcode"]', 'copper-demo');
+      await page.locator('input[name="passcode"]').pressSequentially('copper-demo');   // key by key: this site wants to see keys pressed
       await page.click('button[type="submit"]');
       await page.waitForURL(/\/(remember|overview)/);
     }

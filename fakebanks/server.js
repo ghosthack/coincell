@@ -3,7 +3,8 @@
 //   4701 Harborline Bank   server-rendered pages, password + emailed code, paged tables
 //   4702 Kestrel Card      single-page app over a JSON API, "Load more" paging; a login form that only
 //                          notices a password that was edited, as some carelessly built sites do
-//   4703 Copperleaf Card   server-rendered, "remember this device" step, CSV download
+//   4703 Copperleaf Card   server-rendered, "remember this device" step, CSV download; a login form that
+//                          refuses a passcode unless its field was clicked into and typed in
 //   4704 Meridian Wealth   two-step login, JSON API behind the session cookie
 //   4705 Lakeshore Home Loans  password + security question, payment history split into principal/interest/escrow
 //   4706 Demo Mail         the inbox the fake sites email their codes to, with the same feed Gmail offers
@@ -179,8 +180,16 @@ createSite({ port: 4703, name: 'Copperleaf Card Services', color: '#a8501a', han
   const { path, method, session, form, world } = c;
   const k = world.accounts.cop;
   const login = (err = '') => c.html(`<div class="box"><h2>Cardmember sign on</h2>${err && `<p class="err">${err}</p>`}<form method="post" action="/login">
-    <label>User ID<input name="userId"></label><label>Passcode<input name="passcode" type="password"></label><button type="submit">Sign on</button></form>
-    <p>Demo login: <code>demo</code> / <code>copper-demo</code></p></div>`, err ? 401 : 200);
+    <label>User ID<input name="userId"></label><label>Passcode<input name="passcode" type="password"></label><p class="err" id="sloppy" hidden>Please enter your passcode.</p><button type="submit">Sign on</button></form>
+    <p>Demo login: <code>demo</code> / <code>copper-demo</code></p></div>
+    <script>
+      // Built carelessly on purpose: instead of looking at what is in the passcode field, the page
+      // decides whether one was entered by whether the field was clicked into and a key was pressed in it.
+      const field = document.querySelector('input[name="passcode"]'), seen = { focus: false, key: false };
+      field.addEventListener('focus', () => { seen.focus = true; });
+      field.addEventListener('keyup', () => { seen.key = true; });
+      field.form.addEventListener('submit', (e) => { if (!seen.focus || !seen.key) { e.preventDefault(); document.getElementById('sloppy').hidden = false; } });
+    </script>`, err ? 401 : 200);
   if (path === '/logout') { c.end(); return c.redirect('/login'); }
   if (path === '/login') {
     if (method !== 'POST') return login();
