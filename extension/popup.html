@@ -3,43 +3,42 @@
 <head>
 <meta charset="utf-8">
 <style>
-  :root { color-scheme: light dark; }
-  body { margin: 0; width: 320px; font: 13px/1.45 -apple-system, BlinkMacSystemFont, "Segoe UI", system-ui, sans-serif; }
-  main { padding: 14px; display: grid; gap: 12px; }
-  .brand { display: flex; align-items: center; gap: 8px; font-weight: 650; font-size: 15px; }
-  .muted { color: GrayText; }
-  button { font: inherit; padding: 7px 10px; border-radius: 7px; border: 1px solid color-mix(in srgb, CanvasText 25%, transparent); background: Canvas; color: CanvasText; cursor: pointer; }
+  :root { color-scheme: light dark; --line: color-mix(in srgb, CanvasText 12%, transparent); }
+  body { margin: 0; width: 300px; font: 13px/1.4 -apple-system, BlinkMacSystemFont, "Segoe UI", system-ui, sans-serif; }
+  main { padding: 12px 14px; display: grid; }
+  .brand { display: flex; align-items: center; gap: 8px; font-weight: 650; font-size: 14px; padding-bottom: 8px; }
+  .brand span { margin-left: auto; font-weight: 400; font-size: 12px; color: GrayText; }
+  /* One line per action: what it is on the left, the control in one column on the right.
+     Hover over the label for the details, or click it to open them underneath. */
+  .row { display: grid; grid-template-columns: minmax(0, 1fr) 92px; align-items: center; gap: 12px; height: 40px; border-top: 1px solid var(--line); }
+  .row > .label { white-space: nowrap; overflow: hidden; text-overflow: ellipsis; cursor: help; background: none; border: 0; padding: 0; height: auto; text-align: left; border-radius: 0; }
+  .row > :last-child { justify-self: end; }
+  .row button:not(.label) { width: 92px; }
+  .row input[type=checkbox] { margin: 0 2px 0 0; width: 16px; height: 16px; }
+  .detail { color: GrayText; font-size: 12px; padding: 0 0 10px; }
+  button { font: inherit; height: 28px; padding: 0 8px; border-radius: 7px; border: 1px solid color-mix(in srgb, CanvasText 25%, transparent); background: Canvas; color: CanvasText; cursor: pointer; white-space: nowrap; }
   button.primary { background: CanvasText; color: Canvas; border-color: CanvasText; }
   button:disabled { opacity: .5; cursor: default; }
-  .row { display: flex; gap: 8px; flex-wrap: wrap; }
-  #results { display: grid; gap: 6px; }
+  #results { display: grid; gap: 6px; padding: 2px 0 10px; } #results:empty { display: none; }
   .result { display: grid; grid-template-columns: 16px 1fr; gap: 0 6px; }
   .result b { font-weight: 600; } .result span { grid-column: 2; }
   .result .warn { font-weight: 600; margin-top: 3px; }
-  hr { border: 0; border-top: 1px solid color-mix(in srgb, CanvasText 15%, transparent); margin: 0; }
 </style>
 </head>
 <body>
 <main>
-  <div class="brand"><img src="icons/icon-48.png" width="24" height="24" alt="">coincell</div>
-  <div><div id="site"></div><div class="muted" id="hint"></div></div>
-  <div class="row">
-    <button class="primary" id="send">Send this site</button>
-    <button id="send-all">Send all open sites</button>
-  </div>
+  <div class="brand"><img src="icons/icon-48.png" width="20" height="20" alt="">coincell<span id="version"></span></div>
+  <div class="row"><button class="label" data-for="hint" id="site"></button><button class="primary" id="send">Send</button></div>
+  <div class="detail" id="hint" hidden></div>
+  <div class="row"><button class="label" data-for="all-hint">All open sites</button><button id="send-all">Send all</button></div>
+  <div class="detail" id="all-hint" hidden>Sends every site coincell knows that is open in a tab and logged in.</div>
   <div id="results" role="status"></div>
-  <hr>
-  <div>
-    <div class="row"><button id="record">Start recording this site</button></div>
-    <div class="muted" id="record-hint">Recording teaches coincell how a new site is built. It keeps the layout of pages and data, never the values.</div>
-  </div>
-  <hr>
-  <label><input type="checkbox" id="auto-sync"> Read a site automatically when I log in to it</label>
-  <div>
-    <div class="row"><button id="allow">Allow sign-in help</button></div>
-    <div class="muted" id="allow-hint">Lets the extension fill in logins you saved in coincell on those sites' own sign-in pages, and read the codes they email to the Gmail inbox you named. Chrome will ask you to confirm.</div>
-  </div>
-  <div class="muted" id="version"></div>
+  <div class="row"><button class="label" data-for="record-hint">Record this site</button><button id="record">Record</button></div>
+  <div class="detail" id="record-hint" hidden>Recording teaches coincell how a new site is built. It keeps the layout of pages and data, never the values.</div>
+  <div class="row"><button class="label" data-for="sync-hint">Read a site when I log in</button><input type="checkbox" id="auto-sync" aria-label="Read a site when I log in"></div>
+  <div class="detail" id="sync-hint" hidden>Logging in to a site coincell knows is the cue to read it, at most once every 15 minutes.</div>
+  <div class="row"><button class="label" data-for="allow-hint">Sign-in help</button><button id="allow">Allow</button></div>
+  <div class="detail" id="allow-hint" hidden>Lets the extension fill in logins you saved in coincell on those sites' own sign-in pages, and read the codes they email to the Gmail inbox you named. Chrome asks you to confirm.</div>
 </main>
 <script type="module" src="popup.js"></script>
 </body>

@@ -1,7 +1,14 @@
 import { SITES, siteFor } from './sites.js';
 
 const $ = (id) => document.getElementById(id);
-$('version').textContent = `coincell extension ${chrome.runtime.getManifest().version}`;
+$('version').textContent = chrome.runtime.getManifest().version;
+// A row's label: its details show as a tooltip on hover, and open underneath on a click.
+for (const b of document.querySelectorAll('button.label')) {
+  const detail = $(b.dataset.for);
+  b.setAttribute('aria-expanded', 'false');
+  b.addEventListener('mouseenter', () => { b.title = detail.textContent; });
+  b.addEventListener('click', () => { detail.hidden = !detail.hidden; b.setAttribute('aria-expanded', String(!detail.hidden)); });
+}
 $('auto-sync').checked = (await chrome.storage.local.get('autoSync')).autoSync ?? true;
 $('auto-sync').addEventListener('change', (e) => chrome.storage.local.set({ autoSync: e.target.checked }));
 // Normally the popup acts on the tab you are looking at; ?tab=<id> lets a test point it at one.
@@ -11,7 +18,7 @@ const isWeb = /^https?:/.test(tab?.url ?? '');
 const site = siteFor(tab?.url);
 const origin = isWeb ? new URL(tab.url).origin : null;
 
-$('site').textContent = site ? site.name : isWeb ? new URL(tab.url).hostname : 'No website in this tab';
+$('site').textContent = site ? site.name : isWeb ? `${new URL(tab.url).hostname} (not known yet)` : 'No website in this tab';
 $('hint').textContent = site ? (site.capture ? 'Log in first. This tab will move through the pages it needs by itself.' : 'Log in to the site first if you have not.') : isWeb ? 'coincell does not know this site yet. Record it so a script can be written.' : '';
 $('send').disabled = !site;
 $('record').disabled = !isWeb;
@@ -41,14 +48,14 @@ $('send-all').addEventListener('click', () => run($('send-all'), { type: 'send-a
 
 // Signing in with saved logins needs Chrome's leave for each site's sign-in pages, and for Gmail's feed of unread mail.
 const needed = [...new Set([...SITES.filter((s) => s.target === 'real' && s.signIn).flatMap((s) => [...(s.home ? [`${new URL(s.home).origin}/*`] : []), ...(s.allow ?? [])]), 'https://mail.google.com/*'])];
-const paintAllow = async () => { if (await chrome.permissions.contains({ origins: needed })) { $('allow').disabled = true; $('allow').textContent = 'Sign-in help is allowed'; } };
+const paintAllow = async () => { if (await chrome.permissions.contains({ origins: needed })) { $('allow').disabled = true; $('allow').textContent = 'Allowed ✓'; } };
 paintAllow();
 $('allow').addEventListener('click', async () => { await chrome.permissions.request({ origins: needed }); paintAllow(); });
 
 let recording = Boolean(origin && ((await chrome.storage.local.get('recording')).recording ?? {})[origin]);
 const paint = () => {
-  $('record').textContent = recording ? 'Stop recording' : 'Start recording this site';
-  if (recording) $('record-hint').textContent = 'Recording. Open your accounts, positions and activity pages, then stop. Values are never kept.';
+  $('record').textContent = recording ? 'Stop' : 'Record';
+  if (recording) { $('record-hint').textContent = 'Recording. Open your accounts, positions and activity pages, then stop. Values are never kept.'; $('record-hint').hidden = false; document.querySelector('[data-for="record-hint"]').textContent = 'Recording this site'; }
 };
 paint();
 $('record').addEventListener('click', async () => {
