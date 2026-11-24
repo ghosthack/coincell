@@ -33,7 +33,7 @@ window.loadInsights = async function loadInsights() {
   table($('ins-months'), [
     { label: 'Month', get: (r) => monthName(r.month) + (r.month === thisMonth ? ' (so far)' : '') },
     { label: 'Income', num: true, get: (r) => money(r.income + r.contributions) },
-    { label: 'Spending', num: true, get: (r) => money(r.spending) },
+    { label: 'Spending', num: true, title: 'The percentage is the share of that month\'s income', get: (r) => withShare(money(r.spending), r.spending, r.income + r.contributions) },
     { label: 'Saved', num: true, get: (r) => signed(r.saved) },
     { label: 'Savings rate', num: true, get: (r) => (r.month === thisMonth ? '–' : pct(r.rate, 0)) },
     { label: 'Market movement', num: true, get: (r) => (r.market == null ? '–' : signed(r.market)), cls: 'muted' },
@@ -42,12 +42,13 @@ window.loadInsights = async function loadInsights() {
 
   const cats = d.spending.categories, top = Math.max(1, ...cats.map((c) => Math.max(c.last30, c.average)));
   const total = (k) => cats.reduce((s, c) => s + c[k], 0);
+  const OF_SPENDING = 'The percentage is the share of all spending in that period';
   table($('ins-categories'), [
     { label: 'Category', get: (r) => r.category },
     { label: 'Last 30 days (line marks the average)', get: (r) => (r.total ? '' : bar(r.last30 / top, r.average / top)) },
-    { label: 'Last 30 days', num: true, get: (r) => money(r.last30) },
-    { label: 'Previous 30', num: true, get: (r) => money(r.prev30), cls: 'muted' },
-    { label: 'Monthly average', num: true, get: (r) => money(r.average), cls: 'muted' },
+    { label: 'Last 30 days', num: true, title: OF_SPENDING, get: (r) => withShare(money(r.last30), r.last30, total('last30')) },
+    { label: 'Previous 30', num: true, title: OF_SPENDING, get: (r) => withShare(money(r.prev30), r.prev30, total('prev30')), cls: 'muted' },
+    { label: 'Monthly average', num: true, title: OF_SPENDING, get: (r) => withShare(money(r.average), r.average, total('average')), cls: 'muted' },
     { label: 'Against average', num: true, get: (r) => (r.average ? `${r.last30 > r.average ? '▲' : '▼'} ${pct(Math.abs(r.last30 / r.average - 1), 0)}` : '–') },
   ], cats.length ? [...cats, { category: 'Total', total: true, last30: total('last30'), prev30: total('prev30'), average: total('average') }] : [], 'No spending yet.');
 
@@ -55,7 +56,7 @@ window.loadInsights = async function loadInsights() {
     { label: 'Payee', get: (r) => title(r.merchant) },
     { label: 'Category', get: (r) => r.category, cls: 'muted' },
     { label: 'Payments', num: true, get: (r) => String(r.count), cls: 'muted' },
-    { label: 'Total', num: true, get: (r) => money(r.total) },
+    { label: 'Total', num: true, title: 'The percentage is the share of the payees listed here', get: (r) => withShare(money(r.total), r.total, d.spending.merchants.reduce((s, m) => s + m.total, 0)) },
   ], d.spending.merchants, 'No spending yet.');
 
   const every = { month: 'Monthly', 'half month': 'Twice a month', week: 'Weekly' };
@@ -67,7 +68,7 @@ window.loadInsights = async function loadInsights() {
     { label: 'Paid from', get: (r) => r.account, cls: 'muted' },
     { label: 'How often', get: (r) => every[r.cadence], cls: 'muted' },
     { label: 'Amount', num: true, get: (r) => (r.variable ? '≈ ' : '') + money(r.amount) },
-    { label: 'Per year', num: true, get: (r) => (r.status === 'stopped' ? '–' : money(r.annual)) },
+    { label: 'Per year', num: true, title: 'The percentage is the share of all recurring bills', get: (r) => (r.status === 'stopped' ? '–' : withShare(money(r.annual), r.annual, d.recurringAnnual)) },
     { label: 'Next expected', get: (r) => (r.status === 'stopped' ? '–' : shortDate(r.next)), cls: 'muted' },
   ], d.recurring, 'Nothing recurring found yet. It takes about three months of history.');
 
@@ -116,7 +117,7 @@ window.loadInsights = async function loadInsights() {
       { label: 'If you pay extra each month', get: (r) => `${money(r.extra, { maximumFractionDigits: 0 })} more` },
       { label: 'Paid off', get: (r) => monthYear(r.payoff) },
       { label: 'Sooner by', get: (r) => `${Math.floor(r.monthsSaved / 12)} yr ${r.monthsSaved % 12} mo`, cls: 'muted' },
-      { label: 'Interest saved', num: true, get: (r) => money(r.interestSaved) },
+      { label: 'Interest saved', num: true, title: 'The percentage is the share of the interest still to pay', get: (r) => withShare(money(r.interestSaved), r.interestSaved, l.interestRemaining) },
     ], l.scenarios, '');
     return [head, box];
   }));

@@ -10,6 +10,9 @@ let nwMode = localStorage.getItem('nwMode') ?? 'total';
 
 const money = (n, opts = {}) => n == null ? '–' : new Intl.NumberFormat(undefined, { style: 'currency', currency, ...opts }).format(n);
 const signed = (n) => (n > 0 ? '+' : n < 0 ? '−' : '') + money(Math.abs(n));
+// A figure followed, in small type, by what share of some whole it is. Where there is no sensible whole, just the figure.
+const share = (part, whole, digits = 1) => (whole && part != null && Number.isFinite(part / whole) ? el('span', { class: 'pc' }, `${((Math.abs(part) / Math.abs(whole)) * 100).toFixed(digits)}%`) : null);
+const withShare = (text, part, whole) => [text, share(part, whole)];
 const qty = (n) => n == null ? '–' : new Intl.NumberFormat(undefined, { maximumFractionDigits: 4 }).format(n);
 const parseDate = (s) => { const [y, m, d] = s.split('-').map(Number); return new Date(y, m - 1, d); };
 const fmtDate = (s, opts = { month: 'short', day: 'numeric', year: 'numeric' }) => parseDate(s).toLocaleDateString(undefined, opts);
@@ -32,7 +35,7 @@ const s = (tag, attrs, ...children) => el(tag, { ...attrs, svg: true }, ...child
 function table(target, columns, rows, emptyText) {
   target.replaceChildren();
   if (!rows.length) return target.append(el('div', { class: 'empty' }, emptyText));
-  const head = el('tr', {}, ...columns.map((c) => el('th', { class: c.num ? 'num' : null }, c.label)));
+  const head = el('tr', {}, ...columns.map((c) => el('th', { class: c.num ? 'num' : null, title: c.title ?? null }, c.label)));
   const body = rows.map((r) => r.group
     ? el('tr', { class: 'group' }, el('td', { colspan: columns.length }, r.group))
     : el('tr', {}, ...columns.map((c) => el('td', { class: [c.num && 'num', c.cls].filter(Boolean).join(' ') || null }, ...[c.get(r)].flat()))));
@@ -169,6 +172,8 @@ async function load() {
   const count = (...types) => accounts.filter((a) => types.includes(a.type)).length;
   const plural = (n) => `${n} account${n === 1 ? '' : 's'}`;
   const b = overview.breakdown;
+  const owned = b.cash + b.investments + b.retirement + b.property, owed = -(b.cards + b.loans);
+  const ofOwned = (v) => (owned ? `${((Math.abs(v) / owned) * 100).toFixed(1)}% of what you own · ` : '');
   $('tiles').replaceChildren(...[
     ['Cash', b.cash, plural(count('cash')), 1],
     ['Investments', b.investments, plural(count('investment')), 2],
@@ -176,7 +181,7 @@ async function load() {
     ['Property', b.property, count('property') ? 'your own estimate' : 'none entered', 4],
     ['Owed on cards', -b.cards, plural(count('credit'))],
     ['Owed on mortgage and loans', -b.loans, plural(count('loan'))],
-  ].map(([label, value, sub, colour]) => el('div', { class: 'card tile' }, el('div', { class: 'label' }, colour ? el('i', { style: `background:var(--series-${colour})` }) : null, label), el('div', { class: 'value' }, money(value)), el('div', { class: 'sub' }, sub))));
+  ].map(([label, value, sub, colour]) => el('div', { class: 'card tile' }, el('div', { class: 'label' }, colour ? el('i', { style: `background:var(--series-${colour})` }) : null, label), el('div', { class: 'value' }, money(value)), el('div', { class: 'sub' }, ofOwned(value) + sub))));
 
   drawAllocation(b);
 
@@ -190,7 +195,7 @@ async function load() {
     { label: 'Number', get: (r) => (r.mask ? `••${r.mask}` : ''), cls: 'muted' },
     { label: 'Type', get: (r) => TYPE[r.type] ?? r.type, cls: 'muted' },
     { label: 'As of', get: (r) => fmtDate(r.as_of), cls: 'muted' },
-    { label: 'Balance', num: true, get: (r) => money(r.balance) },
+    { label: 'Balance', num: true, title: 'The percentage is the share of everything you own, or, for a debt, of everything you owe', get: (r) => withShare(money(r.balance), r.balance, r.balance >= 0 ? owned : owed) },
   ], grouped, 'No accounts yet.');
 
   const due = accounts.filter((a) => a.due_amount > 0 && a.due_date).sort((x, y) => x.due_date.localeCompare(y.due_date));
@@ -198,21 +203,22 @@ async function load() {
     { label: 'Account', get: (r) => `${r.name} ••${r.mask ?? ''}` },
     { label: 'Institution', get: (r) => r.bank_name, cls: 'muted' },
     { label: 'Due', get: (r) => { const d = daysUntil(r.due_date); return `${fmtDate(r.due_date, { month: 'short', day: 'numeric' })} (${d < 0 ? `${-d} days overdue` : d === 0 ? 'today' : `in ${d} day${d === 1 ? '' : 's'}`})`; } },
-    { label: 'Amount to pay', num: true, get: (r) => money(r.due_amount) },
-    { label: 'Total owed', num: true, get: (r) => money(-r.balance), cls: 'muted' },
+    { label: 'Amount to pay', num: true, title: 'The percentage is the share of your cash on hand', get: (r) => withShare(money(r.due_amount), r.due_amount, b.cash) },
+    { label: 'Total owed', num: true, title: 'The percentage is the share of everything you owe', get: (r) => withShare(money(-r.balance), r.balance, owed), cls: 'muted' },
   ], due, 'Nothing due.');
   const totalDue = due.reduce((s, a) => s + a.due_amount, 0);
   $('payments-foot').textContent = due.length
     ? `${money(totalDue)} due in total. Cash on hand is ${money(b.cash)}, leaving ${money(b.cash - totalDue)} after these payments.` : '';
 
+  const OF_INCOME = 'The percentage is the share of that month\'s income';
   table($('cashflow'), [
     { label: 'Month', get: (r) => monthName(r.month) + (r.month === networth.at(-1)?.date.slice(0, 7) ? ' (so far)' : '') },
     { label: 'Income', num: true, get: (r) => money(r.income) },
-    { label: 'Spending', num: true, get: (r) => money(r.spending) },
-    { label: 'Left over', num: true, get: (r) => signed(r.income - r.spending) },
-    { label: 'Mortgage principal', num: true, get: (r) => money(r.loanPrincipal), cls: 'muted' },
-    { label: 'Moved to investments', num: true, get: (r) => money(r.invested), cls: 'muted' },
-    { label: 'Paid to cards', num: true, get: (r) => money(r.cardPayments), cls: 'muted' },
+    { label: 'Spending', num: true, title: OF_INCOME, get: (r) => withShare(money(r.spending), r.spending, r.income) },
+    { label: 'Left over', num: true, title: OF_INCOME, get: (r) => withShare(signed(r.income - r.spending), r.income - r.spending, r.income) },
+    { label: 'Mortgage principal', num: true, title: OF_INCOME, get: (r) => withShare(money(r.loanPrincipal), r.loanPrincipal, r.income), cls: 'muted' },
+    { label: 'Moved to investments', num: true, title: OF_INCOME, get: (r) => withShare(money(r.invested), r.invested, r.income), cls: 'muted' },
+    { label: 'Paid to cards', num: true, title: OF_INCOME, get: (r) => withShare(money(r.cardPayments), r.cardPayments, r.income), cls: 'muted' },
   ], cashflow, 'No transactions yet.');
 
   const total = holdings.reduce((a, h) => a + h.value, 0);
@@ -225,7 +231,7 @@ async function load() {
     { label: 'Price', num: true, get: (r) => money(r.price) },
     { label: 'Value', num: true, get: (r) => money(r.value) },
     { label: 'Share', num: true, get: (r) => (total ? `${((r.value / total) * 100).toFixed(1)}%` : '–'), cls: 'muted' },
-    { label: 'Gain / loss', num: true, get: (r) => (r.cost_basis == null ? '–' : `${r.value >= r.cost_basis ? '▲' : '▼'} ${signed(r.value - r.cost_basis)}`) },
+    { label: 'Gain / loss', num: true, title: 'The percentage is the gain or loss against what it cost', get: (r) => (r.cost_basis == null ? '–' : withShare(`${r.value >= r.cost_basis ? '▲' : '▼'} ${signed(r.value - r.cost_basis)}`, r.value - r.cost_basis, r.cost_basis)) },
   ], holdings, 'No securities holdings yet.');
 
   const sel = $('txn-account'), keep = sel.value;
