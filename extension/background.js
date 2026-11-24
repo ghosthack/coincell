@@ -1,6 +1,6 @@
 // Runs the site scripts in your tabs and hands what they collect to coincell on this computer.
 import { SITES, TARGETS, siteFor, targetFor } from './sites.js';
-import { signIn, describe } from './signin.js';
+import { signIn, describe, midway } from './signin.js';
 
 async function post(base, path, body) {
   let res;
@@ -209,7 +209,7 @@ async function refreshOne(site) {
       const { mine = {} } = await chrome.storage.session.get('mine');
       // If that earlier tab is still part-way through signing in, carry on there: starting over would mean another password attempt.
       const earlier = mine[key] != null ? await chrome.tabs.get(mine[key]).catch(() => null) : null;
-      if (earlier && site.signIn?.test(earlier.url ?? '') && !site.loggedIn.test(earlier.url ?? '')) tab = earlier;
+      if (earlier && site.signIn?.test(earlier.url ?? '') && !site.loggedIn.test(earlier.url ?? '') && await midway(earlier)) tab = earlier;
       else { if (earlier) await chrome.tabs.remove(earlier.id).catch(() => {}); tab = await settled((await openWork(site.home)).id); }
       opened = true;
       await chrome.storage.session.set({ mine: { ...mine, [key]: site.loggedIn.test(tab.url ?? '') ? undefined : tab.id } });

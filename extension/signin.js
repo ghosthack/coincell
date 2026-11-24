@@ -380,3 +380,9 @@ export async function describe(site) {
   }
   return tabs.length;
 }
+
+/** Is this tab part-way through a sign-in, past the password (choosing how to get a code, or waiting for one)? */
+export async function midway(tab) {
+  const frames = await chrome.scripting.executeScript({ target: { tabId: tab.id, allFrames: true }, func: onPage, args: ['look', {}] }).catch(() => []);
+  return frames.some((f) => ['code', 'choose', 'push'].includes(f.result?.has));
+}
