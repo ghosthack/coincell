@@ -17,34 +17,39 @@ const sleep = (ms) => new Promise((r) => setTimeout(r, ms));
 
 // Runs inside the sign-in page. `look` says what the page is asking for; the others answer it.
 function onPage(step, data) {
+  // Everything on the page that matches, including what sits inside the page's own components (open shadow roots).
+  const everything = (() => { const out = []; const walk = (root) => { for (const el of root.querySelectorAll('*')) { out.push(el); if (el.shadowRoot) walk(el.shadowRoot); } }; walk(document); return out; })();
+  const Q = (selector) => everything.filter((el) => el.matches(selector));
+  // A home-made control may answer to the press rather than the click, so it is given both.
+  const press = (e) => { for (const type of ['pointerdown', 'mousedown']) e.dispatchEvent(new MouseEvent(type, { bubbles: true, cancelable: true, view: window })); e.focus?.(); for (const type of ['pointerup', 'mouseup']) e.dispatchEvent(new MouseEvent(type, { bubbles: true, cancelable: true, view: window })); e.click(); };
   const shown = (el) => { const r = el.getBoundingClientRect(), s = getComputedStyle(el); return r.width > 2 && r.height > 2 && s.visibility !== 'hidden' && s.display !== 'none' && !el.disabled && !el.readOnly; };
   const words = (i) => [i.name, i.id, i.placeholder, i.autocomplete, i.getAttribute('aria-label'), i.labels?.[0]?.textContent].join(' ');
   const shown2 = (el) => { const r = el.getBoundingClientRect(); return r.width > 2 && r.height > 2 && getComputedStyle(el).visibility !== 'hidden'; };
-  const inputs = [...document.querySelectorAll('input')].filter(shown);
+  const inputs = Q('input').filter(shown);
   const plain = inputs.filter((i) => ['text', 'email', 'tel', 'number'].includes(i.type));
   const pass = inputs.find((i) => i.type === 'password' && i.autocomplete !== 'one-time-code');
   const code = pass ? null : inputs.find((i) => i.autocomplete === 'one-time-code') ?? plain.find((i) => /otp|verif|security.?code|one.?time|\bcode\b/i.test(words(i)));
   const user = pass ? plain.filter((i) => pass.compareDocumentPosition(i) & Node.DOCUMENT_POSITION_PRECEDING).at(-1)
     : !code && plain.length === 1 && /user|login|e-?mail|\bid\b/i.test(words(plain[0])) ? plain[0] : null;
-  const buttons = (root) => [...root.querySelectorAll('button, input[type=submit], [role=button]')].filter(shown);
+  const buttons = (root) => (root === document ? Q('button, input[type=submit], [role=button]') : [...root.querySelectorAll('button, input[type=submit], [role=button]')]).filter(shown);
   const label = (b) => (b.textContent || b.value || b.getAttribute('aria-label') || '').trim();
   const remember = pass || code || user ? null : buttons(document).find((b) => /remember (this|my) (device|computer|browser)|trust this (device|computer|browser)/i.test(label(b)));
 
   // The layout of the page, for working out why a sign-in went wrong: headings, and the labels of
   // fields and buttons. No field values; digits and anything shaped like an email address are masked.
   if (step === 'outline') {
-    const texts = [...document.querySelectorAll('p, label, li, [role=radio], [role=option]')].filter(shown2).map((e) => e.textContent.replace(/\s+/g, ' ').trim()).filter((t) => t.length > 3 && t.length < 160).slice(0, 14);
+    const texts = Q('p, label, li, [role=radio], [role=option]').filter(shown2).map((e) => e.textContent.replace(/\s+/g, ' ').trim()).filter((t) => t.length > 3 && t.length < 160).slice(0, 14);
     const tagOf = (el) => { const chain = []; for (let n = el; n && chain.length < 4; n = n.parentNode instanceof ShadowRoot ? n.parentNode.host : n.parentElement) chain.push(n.tagName?.toLowerCase() + (n.getAttribute?.('role') ? `[role=${n.getAttribute('role')}]` : '')); return chain.join(' < '); };
     const mask = (t) => String(t ?? '').replace(/\s+/g, ' ').trim().replace(/[^\s@]+@[^\s@]+/g, 'x@x').replace(/\d/g, '9').slice(0, 90);
     return {
       path: location.pathname.replace(/\d/g, '9').slice(0, 80), frames: document.querySelectorAll('iframe').length,
-      headings: [...document.querySelectorAll('h1, h2, h3, legend, [role=heading]')].filter(shown2).slice(0, 8).map((h) => mask(h.textContent)),
-      fields: [...document.querySelectorAll('input, select, textarea')].filter((i) => i.type !== 'hidden').slice(0, 20).map((i) => ({ type: i.type, name: mask(i.name), id: mask(i.id), autocomplete: i.autocomplete || undefined,
+      headings: Q('h1, h2, h3, legend, [role=heading]').filter(shown2).slice(0, 8).map((h) => mask(h.textContent)),
+      fields: Q('input, select, textarea').filter((i) => i.type !== 'hidden').slice(0, 20).map((i) => ({ type: i.type, name: mask(i.name), id: mask(i.id), autocomplete: i.autocomplete || undefined,
         label: mask(i.labels?.[0]?.textContent || i.getAttribute('aria-label') || i.placeholder), shown: shown(i), filled: ['radio', 'checkbox', 'button', 'submit'].includes(i.type) ? undefined : Boolean(i.value), within: i.type === 'radio' ? tagOf(i) : undefined, checked: i.type === 'radio' || i.type === 'checkbox' ? i.checked : undefined })),
       buttons: buttons(document).slice(0, 15).map((b) => mask(label(b))),
-      nextButton: (() => { const b = [...document.querySelectorAll('button, [role=button]')].find((x) => /^next/i.test(label(x))); return b ? `${tagOf(b)} disabled=${b.disabled} aria-disabled=${b.getAttribute('aria-disabled')} type=${b.type}` : null; })(),
-      alerts: [...document.querySelectorAll('[role=alert], .error, [aria-live=assertive]')].filter(shown2).map((e) => mask(e.textContent)).filter(Boolean).slice(0, 4),
-      links: [...document.querySelectorAll('a')].filter(shown2).slice(0, 15).map((a) => mask(a.textContent)).filter(Boolean),
+      nextButton: (() => { const b = Q('button, [role=button]').find((x) => /^next/i.test(label(x))); return b ? `${tagOf(b)} disabled=${b.disabled} aria-disabled=${b.getAttribute('aria-disabled')} type=${b.type}` : null; })(),
+      alerts: Q('[role=alert], .error, [aria-live=assertive]').filter(shown2).map((e) => mask(e.textContent)).filter(Boolean).slice(0, 4),
+      links: Q('a').filter(shown2).slice(0, 15).map((a) => mask(a.textContent)).filter(Boolean),
       texts: texts.map(mask),
     };
   }
@@ -53,11 +58,18 @@ function onPage(step, data) {
   // A page asking how to reach you for the second step: a set of choices and a button to go on.
   // The order of preference is what needs least of you: an emailed code (coincell reads it), then
   // whatever leads to more choices, then a tap in the site's phone app, then a texted code.
-  const options = pass || code || user || push ? [] : [...document.querySelectorAll('input[type=radio]')].map((r) => ({ r, face: shown(r) ? r : [...(r.labels ?? [])].find(shown2), text: words(r) })).filter((o) => o.face);
+  const options = pass || code || user || push ? [] : Q('input[type=radio]').map((r) => ({ r, face: shown(r) ? r : [...(r.labels ?? [])].find(shown2), text: words(r) })).filter((o) => o.face);
   const KINDS = [['email', /e-?mail|@/i], ['more', /different way|another way|other (way|option|method)/i], ['push', /notification|push|\bapp\b/i], ['text', /\btext\b|sms/i]];
   const choice = options.length >= 2 ? KINDS.filter(([kind]) => kind !== data?.avoid).map(([kind, re]) => ({ kind, o: options.find((o) => re.test(o.text)) })).find((c) => c.o) : null;
-  if (step === 'look') return { has: pass ? 'password' : code ? 'code' : user ? 'user' : push ? 'push' : choice ? 'choose' : remember ? 'remember' : 'none', url: location.href,
-    sig: choice ? options.map((o) => o.text.replace(/\d/g, '9').slice(0, 30)).join('|') : '' };
+  // The same question asked with big cards to press instead of a list ("Text a code via SMS", "Receive a
+  // voice call"). At least two ways must be on offer for it to count; a voice call is never chosen.
+  const WAYS = [['email', /e-?mail (me )?(a |the )?code|code (via|by) e-?mail/i], ['push', /send (a |the )?(push )?notification/i], ['text', /text (me )?(a |the )?code|via sms|code (via|by) (sms|text)/i], ['voice', /voice call|call me/i]];
+  const innermost = (re) => everything.filter((e) => shown2(e) && re.test(e.textContent) && e.textContent.trim().length < 60).filter((e, _, all) => !all.some((o) => o !== e && e.contains(o)))[0];
+  const cards = pass || code || user || push || choice ? [] : WAYS.map(([kind, re]) => ({ kind, el: innermost(re) })).filter((c) => c.el);
+  const card = cards.length >= 2 ? cards.find((c) => c.kind !== 'voice') : null;
+  if (step === 'look') return { has: pass ? 'password' : code ? 'code' : user ? 'user' : push ? 'push' : choice || card ? 'choose' : remember ? 'remember' : 'none', url: location.href,
+    sig: choice ? options.map((o) => o.text.replace(/\d/g, '9').slice(0, 30)).join('|') : card ? cards.map((c) => c.kind).join('|') : '' };
+  if (step === 'choose' && !choice && card) { tickRemember(); press(card.el.closest('button, a, [role=button], [tabindex], li, label') ?? card.el); return { picked: card.kind, cards: true }; }
   if (step === 'choose' && choice) {
     tickRemember();
     choice.o.face.click(); if (!choice.o.r.checked) choice.o.r.click();
@@ -67,7 +79,7 @@ function onPage(step, data) {
   // After a choice, some pages show a drop-down asking where to send the code. Prefer email, then a text.
   // One call opens the drop-down if it is closed, the next picks from it.
   if (step === 'contact') {
-    const native = [...document.querySelectorAll('select')].filter(shown).find((sel) => [...sel.options].some((o) => /e-?mail|text/i.test(o.textContent)));
+    const native = Q('select').filter(shown).find((sel) => [...sel.options].some((o) => /e-?mail|text/i.test(o.textContent)));
     if (native) {
       const opt = [...native.options].find((o) => /e-?mail/i.test(o.textContent)) ?? [...native.options].find((o) => /text/i.test(o.textContent));
       native.value = opt.value; native.dispatchEvent(new Event('change', { bubbles: true }));
@@ -78,17 +90,17 @@ function onPage(step, data) {
     // A home-made control may answer to the press rather than the click, so it is given both.
     const press = (e) => { for (const type of ['pointerdown', 'mousedown']) e.dispatchEvent(new MouseEvent(type, { bubbles: true, cancelable: true, view: window })); e.focus?.(); for (const type of ['pointerup', 'mouseup']) e.dispatchEvent(new MouseEvent(type, { bubbles: true, cancelable: true, view: window })); e.click(); };
     const visible = data.evenHidden ? () => true : shown2;
-    const saying = (re) => [...document.querySelectorAll('body *')].filter((e) => visible(e) && re.test(e.textContent) && e.textContent.trim().length < 60).filter((e, _, all) => !all.some((o) => o !== e && e.contains(o))).at(-1);
+    const saying = (re) => Q('*').filter((e) => visible(e) && re.test(e.textContent) && e.textContent.trim().length < 60).filter((e, _, all) => !all.some((o) => o !== e && e.contains(o))).at(-1);
     const how = (e) => { const chain = []; for (let n = e; n && chain.length < 4; n = n.parentElement) chain.push(`${n.tagName.toLowerCase()}${n.getAttribute('role') ? `[role=${n.getAttribute('role')}]` : ''}`); return chain.join(' < '); };
     // The control that opens it: something meant to be pressed, before any wrapper that merely has "select" in its name.
-    const openers = [...document.querySelectorAll('[aria-haspopup], [role=combobox], [id*="select" i], [id*="dropdown" i]')].filter(shown2).filter((e) => !e.matches('input[type=radio], input[type=checkbox]'));
+    const openers = Q('[aria-haspopup], [role=combobox], [id*="select" i], [id*="dropdown" i]').filter(shown2).filter((e) => !e.matches('input[type=radio], input[type=checkbox]'));
     const opener = openers.find((e) => e.matches('button, input[type=button], [role=combobox], [role=button], [aria-haspopup]')) ?? openers.at(-1);
     // Has a pick registered? Then the control itself now says so.
     const says = `${opener?.value ?? ''} ${opener?.textContent ?? ''} ${opener?.getAttribute?.('aria-label') ?? ''}`;
     if (/e-?mail|text me/i.test(says)) return { picked: /e-?mail/i.test(says) ? 'email' : 'text', within: 'confirmed by the control' };
     const item = saying(/^\s*e-?mail\b/i) ?? saying(/^\s*text\b/i);
     if (item && data.keys && opener) {   // the keyboard way: arrow down to the entry, then Enter
-      const entries = [...document.querySelectorAll('[role=option]')], at = entries.findIndex((e) => e.contains(item) || item.contains(e));
+      const entries = Q('[role=option]'), at = entries.findIndex((e) => e.contains(item) || item.contains(e));
       const key = (k) => { for (const type of ['keydown', 'keyup']) (document.activeElement ?? opener).dispatchEvent(new KeyboardEvent(type, { bubbles: true, cancelable: true, key: k, code: k, keyCode: k === 'Enter' ? 13 : 40, which: k === 'Enter' ? 13 : 40 })); };
       opener.focus();
       for (let i = 0; i <= Math.max(at, 0); i++) key('ArrowDown');
@@ -166,7 +178,7 @@ function onPage(step, data) {
   // "Remember this device", where offered, means fewer codes and approvals later.
   // The real checkbox is often hidden behind a styled label, so it is ticked through its label when that is what shows.
   function tickRemember() {
-    for (const box of document.querySelectorAll('input[type=checkbox]')) {
+    for (const box of Q('input[type=checkbox]')) {
       if (box.checked || box.disabled || !/remember (this|my) (device|computer|browser)|trust this (device|computer|browser)|don.?t ask (me )?again/i.test(words(box))) continue;
       const face = shown(box) ? box : [...(box.labels ?? [])].find(shown2);
       if (face) face.click();
@@ -321,7 +333,8 @@ export async function signIn(site, tab, say, { whateverTheAddress = false } = {}
     }
     if (has.startsWith('choose')) {
       const trail = [];
-      let picked = (await run('choose'))[0]?.result?.picked;
+      const chosen = (await run('choose'))[0]?.result ?? {};
+      let picked = chosen.picked;
       if (picked === 'more') {   // "another way" may open a drop-down of ways: pick from it
         await sleep(900);
         for (let i = 0, presses = 0; i < 9; i++) {
@@ -336,7 +349,7 @@ export async function signIn(site, tab, say, { whateverTheAddress = false } = {}
         if (picked === 'more') { picked = (await run('choose', { avoid: 'more' }).catch(() => []))[0]?.result?.picked ?? 'more'; trail.push(`fell back to ${picked}`); }
       }
       let went = false;
-      for (let i = 0; i < 6 && !went; i++) { await sleep(600); went = Boolean((await run('go').catch(() => []))[0]?.result?.went); }
+      for (let i = 0; i < (chosen.cards ? 0 : 6) && !went; i++) { await sleep(600); went = Boolean((await run('go').catch(() => []))[0]?.result?.went); }
       await sleep(1500); await note(`after choosing ${picked} (next pressed: ${went}; ${trail.join(', ')})`);
       if (picked === 'push') { await say('Approve the sign-in on your phone.', 'needs-approval'); patience = 260; }
       else await say(picked === 'email' ? 'Asked the site to email a code' : picked === 'text' ? 'Asked the site to text a code' : 'Choosing how the site should reach you');
