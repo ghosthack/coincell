@@ -189,7 +189,7 @@ async function load() {
   const b = overview.breakdown;
   const owned = b.cash + b.investments + b.retirement + b.property, owed = -(b.cards + b.loans);
   const pcOwned = (v) => (owned ? `${((Math.abs(v) / owned) * 100).toFixed(1)}%` : HIDDEN);
-  const ofOwned = (v) => (showAmounts ? (owned ? `${pcOwned(v)} of what you own · ` : '') : 'of what you own · ');
+  const ofOwned = (v) => (showAmounts && owned ? `${pcOwned(v)} · ` : '');   // the ring beside the tiles says what the shares are of
   $('tiles').replaceChildren(...[
     ['Cash', b.cash, plural(count('cash')), 1],
     ['Investments', b.investments, plural(count('investment')), 2],
@@ -276,7 +276,7 @@ function drawAllocation(b) {
     const a1 = a0 + Math.min(value / total, 0.9999) * 2 * Math.PI, big = a1 - a0 > Math.PI ? 1 : 0;
     const slice = s('path', { d: `M${at(R, a0)} A${R} ${R} 0 ${big} 1 ${at(R, a1)} L${at(r, a1)} A${r} ${r} 0 ${big} 0 ${at(r, a0)} Z`,
       fill: `var(--series-${colour})`, stroke: 'var(--surface-1)', 'stroke-width': 2, 'stroke-linejoin': 'round' });
-    slice.addEventListener('pointermove', (ev) => showTip(ev, name, [{ color: `var(--series-${colour})`, name: `${share(value)} of what you own`, value: money(value) }]));
+    slice.addEventListener('pointermove', (ev) => showTip(ev, name, [{ color: `var(--series-${colour})`, name: share(value), value: money(value) }]));
     slice.addEventListener('pointerleave', hideTip);
     svg.append(slice);
     a0 = a1;
