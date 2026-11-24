@@ -207,8 +207,10 @@ async function refreshOne(site) {
       // A login tab this extension opened on an earlier attempt is replaced, not piled on.
       // Tabs you opened yourself are never closed.
       const { mine = {} } = await chrome.storage.session.get('mine');
-      if (mine[key] != null) await chrome.tabs.remove(mine[key]).catch(() => {});
-      tab = await settled((await openWork(site.home)).id);
+      // If that earlier tab is still part-way through signing in, carry on there: starting over would mean another password attempt.
+      const earlier = mine[key] != null ? await chrome.tabs.get(mine[key]).catch(() => null) : null;
+      if (earlier && site.signIn?.test(earlier.url ?? '') && !site.loggedIn.test(earlier.url ?? '')) tab = earlier;
+      else { if (earlier) await chrome.tabs.remove(earlier.id).catch(() => {}); tab = await settled((await openWork(site.home)).id); }
       opened = true;
       await chrome.storage.session.set({ mine: { ...mine, [key]: site.loggedIn.test(tab.url ?? '') ? undefined : tab.id } });
     }

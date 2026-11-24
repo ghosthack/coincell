@@ -69,7 +69,7 @@ function onPage(step, data) {
   const card = cards.length >= 2 ? cards.find((c) => c.kind !== 'voice') : null;
   if (step === 'look') return { has: pass ? 'password' : code ? 'code' : user ? 'user' : push ? 'push' : choice || card ? 'choose' : remember ? 'remember' : 'none', url: location.href,
     sig: choice ? options.map((o) => o.text.replace(/\d/g, '9').slice(0, 30)).join('|') : card ? cards.map((c) => c.kind).join('|') : '' };
-  if (step === 'choose' && !choice && card) { tickRemember(); press(card.el.closest('button, a, [role=button], [tabindex], li, label') ?? card.el); return { picked: card.kind, cards: true }; }
+  if (step === 'choose' && !choice && card) { tickRemember(); press(card.el); return { picked: card.kind, cards: true }; }   // the card's own text: the press travels up to whatever the card is made of
   if (step === 'choose' && choice) {
     tickRemember();
     choice.o.face.click(); if (!choice.o.r.checked) choice.o.r.click();
