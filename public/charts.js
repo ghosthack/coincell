@@ -3,7 +3,8 @@
 // ($, el, s, niceTicks, money, signed, fmtDate, parseDate). Colours come from CSS
 // variables, so light and dark mode each get their own validated steps.
 const C = (n) => `var(--series-${n})`;
-const compactMoney = (v) => new Intl.NumberFormat(undefined, { style: 'currency', currency, notation: 'compact', maximumFractionDigits: 1 }).format(v);
+// With amounts out of sight (see showAmounts in app.js) a chart keeps its shape but its scale carries no figures.
+const compactMoney = (v) => (showAmounts ? new Intl.NumberFormat(undefined, { style: 'currency', currency, notation: 'compact', maximumFractionDigits: 1 }).format(v) : '');
 const nice = (str) => str.toLowerCase().replace(/(^|[\s&-])([a-z])/g, (m, a, b) => a + b.toUpperCase());
 
 // One shared tooltip. Rows are { color?, line?, name, value }.

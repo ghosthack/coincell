@@ -25,7 +25,7 @@ window.loadInsights = async function loadInsights() {
   );
 
   const marks = { action: '!', idea: '→', good: '✓' };
-  $('ins-advice').replaceChildren(...(d.advice.length ? d.advice.map((a) => el('div', { class: 'item' }, el('span', { class: 'mark', title: a.tone }, marks[a.tone]), el('span', { class: 'title' }, a.title), el('span', { class: 'text' }, a.text)))
+  $('ins-advice').replaceChildren(...(d.advice.length ? d.advice.map((a) => el('div', { class: 'item' }, el('span', { class: 'mark', title: a.tone }, marks[a.tone]), el('span', { class: 'title' }, hush(a.title)), el('span', { class: 'text' }, hush(a.text))))
     : [el('div', { class: 'empty' }, 'Nothing to suggest yet.')]));
   window.setChartData(d);
 
@@ -102,7 +102,7 @@ window.loadInsights = async function loadInsights() {
   table($('ins-anomalies'), [
     { label: 'Date', get: (r) => shortDate(r.date), cls: 'muted' },
     { label: 'What', get: (r) => r.kind },
-    { label: 'Transaction', get: (r) => [title(r.description), el('div', { class: 'muted' }, r.note.replace(/about ([\d.]+)/, (m, a) => 'about ' + money(Number(a))))], cls: 'wrap' },
+    { label: 'Transaction', get: (r) => [hush(title(r.description)), el('div', { class: 'muted' }, r.note.replace(/about ([\d.]+)/, (m, a) => 'about ' + money(Number(a))))], cls: 'wrap' },
     { label: 'Account', get: (r) => r.account, cls: 'muted' },
     { label: 'Amount', num: true, get: (r) => signed(r.amount) },
   ], d.anomalies, 'Nothing looks out of place.');

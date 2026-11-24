@@ -8,11 +8,22 @@ let seriesByType = [];
 let noDataHint = 'No data yet.';
 let nwMode = localStorage.getItem('nwMode') ?? 'total';
 
-const money = (n, opts = {}) => n == null ? '–' : new Intl.NumberFormat(undefined, { style: 'currency', currency, ...opts }).format(n);
+// Figures are shown one of two ways: as percentages and shares (the default), with amounts kept
+// out of sight, or as amounts. The switch is beside the tabs and is remembered.
+let showAmounts = localStorage.getItem('figures') === 'amounts';
+const HIDDEN = '•••';
+// Amounts written into a sentence (a suggestion, a bank's own description of a payment) are hidden the same way.
+const hush = (text) => (showAmounts ? text : String(text ?? '').replace(/[$€£]\s?\d[\d,]*(\.\d+)?[KMB]?\b/g, HIDDEN));
+const money = (n, opts = {}) => n == null ? '–' : !showAmounts ? HIDDEN : new Intl.NumberFormat(undefined, { style: 'currency', currency, ...opts }).format(n);
 const signed = (n) => (n > 0 ? '+' : n < 0 ? '−' : '') + money(Math.abs(n));
 // A figure followed, in small type, by what share of some whole it is. Where there is no sensible whole, just the figure.
 const share = (part, whole, digits = 1) => (whole && part != null && Number.isFinite(part / whole) ? el('span', { class: 'pc' }, `${((Math.abs(part) / Math.abs(whole)) * 100).toFixed(digits)}%`) : null);
-const withShare = (text, part, whole) => [text, share(part, whole)];
+// With amounts: the amount, then its share in small type. Without: the share alone, keeping any sign or arrow.
+const withShare = (text, part, whole) => {
+  if (showAmounts) return [text, share(part, whole)];
+  const pc = whole && part != null && Number.isFinite(part / whole) ? `${((Math.abs(part) / Math.abs(whole)) * 100).toFixed(1)}%` : null;
+  return [pc ? `${/^[▲▼+−≈ ]*/.exec(String(text))[0]}${pc}` : text];
+};
 const qty = (n) => n == null ? '–' : new Intl.NumberFormat(undefined, { maximumFractionDigits: 4 }).format(n);
 const parseDate = (s) => { const [y, m, d] = s.split('-').map(Number); return new Date(y, m - 1, d); };
 const fmtDate = (s, opts = { month: 'short', day: 'numeric', year: 'numeric' }) => parseDate(s).toLocaleDateString(undefined, opts);
@@ -70,7 +81,9 @@ function drawChart() {
   const W = box.clientWidth, H = box.clientHeight;
   if (!W) return; // tab is hidden
   const m = { t: 10, r: 14, b: 24, l: 14 };
-  const compact = (v) => new Intl.NumberFormat(undefined, { style: 'currency', currency, notation: 'compact', maximumFractionDigits: 1 }).format(v);
+  // Without amounts, the line is read against where it started: +2.0% means two percent above the first day shown.
+  const against = (v) => { const base = pts[0].value || 1, d = (v / base - 1) * 100; return `${d > 0 ? '+' : d < 0 ? '−' : ''}${Math.abs(d).toFixed(1)}%`; };
+  const compact = (v) => (showAmounts ? new Intl.NumberFormat(undefined, { style: 'currency', currency, notation: 'compact', maximumFractionDigits: 1 }).format(v) : against(v));
   const vals = pts.map((p) => p.value);
   const ticks = niceTicks(Math.min(...vals), Math.max(...vals));
   m.l = 14 + Math.max(...ticks.map((t) => compact(t).length)) * 6.4;
@@ -107,7 +120,7 @@ function drawChart() {
     const p = pts.reduce((a, b) => Math.abs(x(b) - px) < Math.abs(x(a) - px) ? b : a);
     place(p);
     cross.setAttribute('x1', x(p)); cross.setAttribute('x2', x(p)); cross.setAttribute('visibility', 'visible');
-    tip.replaceChildren(el('span', { class: 'muted' }, fmtDate(p.date)), el('b', {}, money(p.value)));
+    tip.replaceChildren(el('span', { class: 'muted' }, fmtDate(p.date)), el('b', {}, showAmounts ? money(p.value) : against(p.value)));
     tip.style.display = 'block';
     const left = x(p) + 12 + tip.offsetWidth > W ? x(p) - 12 - tip.offsetWidth : x(p) + 12;
     tip.style.transform = `translate(${left}px, ${Math.max(0, y(p.value) - tip.offsetHeight - 8)}px)`;
@@ -128,7 +141,9 @@ function setRange(days) {
   if (inRange.length > 1) {
     const d = inRange.at(-1).value - inRange[0].value;
     const pct = inRange[0].value ? ` (${(Math.abs(d / inRange[0].value) * 100).toFixed(1)}%)` : '';
-    $('change').textContent = `${d > 0 ? '▲' : d < 0 ? '▼' : ''} ${signed(d)}${pct} since ${fmtDate(inRange[0].date)}`;
+    $('change').textContent = showAmounts ? `${d > 0 ? '▲' : d < 0 ? '▼' : ''} ${signed(d)}${pct} since ${fmtDate(inRange[0].date)}` : `since ${fmtDate(inRange[0].date)}`;
+    // Without amounts, the headline is how far net worth has moved over the range shown.
+    $('networth').textContent = showAmounts ? money(inRange.at(-1).value) : inRange[0].value ? `${d > 0 ? '▲' : d < 0 ? '▼' : ''} ${(Math.abs(d / inRange[0].value) * 100).toFixed(1)}%` : HIDDEN;
   } else $('change').textContent = ' ';
 }
 
@@ -141,10 +156,10 @@ async function loadTransactions() {
   const account = $('txn-account').value;
   const rows = await api('/api/transactions?limit=100' + (account ? `&account=${encodeURIComponent(account)}` : ''));
   const describe = (r) => {
-    if (!r.other_account) return r.category && r.account_type !== 'cash' && r.account_type !== 'credit' ? [r.description, el('span', { class: 'tag' }, r.category)] : r.description;
+    if (!r.other_account) return r.category && r.account_type !== 'cash' && r.account_type !== 'credit' ? [hush(r.description), el('span', { class: 'tag' }, r.category)] : hush(r.description);
     const types = [r.account_type, r.other_type];
     const kind = types.includes('credit') ? 'Card payment' : types.includes('loan') ? 'Loan payment' : 'Transfer';
-    return [r.description, el('span', { class: 'tag' }, `${kind} ${r.amount < 0 ? '→' : '←'} ${r.other_account}`)];
+    return [hush(r.description), el('span', { class: 'tag' }, `${kind} ${r.amount < 0 ? '→' : '←'} ${r.other_account}`)];
   };
   table($('transactions'), [
     { label: 'Date', get: (r) => fmtDate(r.date), cls: 'muted' },
@@ -173,7 +188,8 @@ async function load() {
   const plural = (n) => `${n} account${n === 1 ? '' : 's'}`;
   const b = overview.breakdown;
   const owned = b.cash + b.investments + b.retirement + b.property, owed = -(b.cards + b.loans);
-  const ofOwned = (v) => (owned ? `${((Math.abs(v) / owned) * 100).toFixed(1)}% of what you own · ` : '');
+  const pcOwned = (v) => (owned ? `${((Math.abs(v) / owned) * 100).toFixed(1)}%` : HIDDEN);
+  const ofOwned = (v) => (showAmounts ? (owned ? `${pcOwned(v)} of what you own · ` : '') : 'of what you own · ');
   $('tiles').replaceChildren(...[
     ['Cash', b.cash, plural(count('cash')), 1],
     ['Investments', b.investments, plural(count('investment')), 2],
@@ -181,7 +197,7 @@ async function load() {
     ['Property', b.property, count('property') ? 'your own estimate' : 'none entered', 4],
     ['Owed on cards', -b.cards, plural(count('credit'))],
     ['Owed on mortgage and loans', -b.loans, plural(count('loan'))],
-  ].map(([label, value, sub, colour]) => el('div', { class: 'card tile' }, el('div', { class: 'label' }, colour ? el('i', { style: `background:var(--series-${colour})` }) : null, label), el('div', { class: 'value' }, money(value)), el('div', { class: 'sub' }, ofOwned(value) + sub))));
+  ].map(([label, value, sub, colour]) => el('div', { class: 'card tile' }, el('div', { class: 'label' }, colour ? el('i', { style: `background:var(--series-${colour})` }) : null, label), el('div', { class: 'value' }, showAmounts ? money(value) : pcOwned(value)), el('div', { class: 'sub' }, ofOwned(value) + sub))));
 
   drawAllocation(b);
 
@@ -266,8 +282,8 @@ function drawAllocation(b) {
     a0 = a1;
   }
   const text = (y, size, weight, fill, str) => { const t = s('text', { x: 100, y, 'text-anchor': 'middle', 'font-size': size, 'font-weight': weight, fill }); t.textContent = str; return t; };
-  svg.append(text(92, 11, 400, 'var(--text-muted)', 'You own'),
-    text(114, 19, 620, 'var(--text-primary)', new Intl.NumberFormat(undefined, { style: 'currency', currency, notation: 'compact', maximumFractionDigits: 2 }).format(total)));
+  svg.append(text(92, 11, 400, 'var(--text-muted)', showAmounts ? 'You own' : 'What you own'),
+    text(114, 19, 620, 'var(--text-primary)', showAmounts ? new Intl.NumberFormat(undefined, { style: 'currency', currency, notation: 'compact', maximumFractionDigits: 2 }).format(total) : 'by kind'));
   box.replaceChildren(svg);
 }
 
@@ -333,6 +349,14 @@ async function refresh(bank) {
   try { await post('/api/refresh', { bank }); showStanding(await api('/api/status')); } catch (e) { $('status').textContent = e.message; $('refresh').disabled = false; }
 }
 $('refresh').addEventListener('click', () => refresh('all'));
+// The switch between percentages and amounts.
+const paintFigures = () => { for (const b of $('figures').children) b.setAttribute('aria-pressed', String((b.dataset.figures === 'amounts') === showAmounts)); };
+paintFigures();
+$('figures').addEventListener('click', (e) => {
+  const want = e.target.closest('[data-figures]')?.dataset.figures;
+  if (!want) return;
+  showAmounts = want === 'amounts'; localStorage.setItem('figures', want); paintFigures(); load();
+});
 $('institutions').addEventListener('click', (e) => { if (e.target.dataset.bank) refresh(e.target.dataset.bank); });
 $('logins').addEventListener('submit', async (e) => {
   e.preventDefault();
