@@ -195,8 +195,8 @@ async function load() {
     ['Investments', b.investments, plural(count('investment')), 2],
     ['Retirement', b.retirement, plural(count('retirement')), 3],
     ['Property', b.property, count('property') ? 'your own estimate' : 'none entered', 4],
-    ['Owed on cards', -b.cards, plural(count('credit'))],
-    ['Owed on mortgage and loans', -b.loans, plural(count('loan'))],
+    ['Cards', -b.cards, plural(count('credit'))],
+    ['Mortgage and loans', -b.loans, plural(count('loan'))],
   ].map(([label, value, sub, colour]) => el('div', { class: 'card tile' }, el('div', { class: 'label' }, colour ? el('i', { style: `background:var(--series-${colour})` }) : null, label), el('div', { class: 'value' }, showAmounts ? money(value) : pcOwned(value)), el('div', { class: 'sub' }, ofOwned(value) + sub))));
 
   drawAllocation(b);
